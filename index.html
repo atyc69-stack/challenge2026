@@ -982,7 +982,10 @@ function buildResume(){const tw=getWkEntries(0),pw=getWkEntries(-1);if(!tw.lengt
     // Get template + custom exercises for this day
     const customKey='custom_exs_'+se.key+'_'+ds;
     const customExs=SESSIONS[customKey]||[];
-    const allExs=(se.exs||[]).concat(customExs);
+    // For weeks from 2026-04-20 onwards, use only custom exercises
+    var weekMon=new Date(ds);weekMon.setDate(new Date(ds).getDate()-(new Date(ds).getDay()===0?6:new Date(ds).getDay()-1));
+    var isFutWeek=localDateStr(weekMon)>='2026-04-20';
+    const allExs=isFutWeek?customExs:(se.exs||[]).concat(customExs);
     // Find session data for this date
     const sk=se.key+'_'+ds;
     const sess=SESSIONS[sk];
@@ -1220,7 +1223,7 @@ document.addEventListener('change',function(ev){
   const inpc=ev.target.closest('.inp-sc');
   if(inpc){const v=parseFloat(inpc.value);if(!isNaN(v))saveSerieCharge(inpc.dataset.k,parseInt(inpc.dataset.i),parseInt(inpc.dataset.s),v);}
 });
-function setSerieStatus(dk2,ei,si,status){const sk=dk2+'_'+localDateStr(new Date());if(!SESSIONS[sk])SESSIONS[sk]={exs:{}};if(!SESSIONS[sk].exs[ei])SESSIONS[sk].exs[ei]={series:{},charge:0,ressenti:null};SESSIONS[sk].exs[ei].series[si]={status};const btn=document.getElementById('sb_'+dk2+'_'+ei+'_'+si);if(btn){btn.className='serie-ok '+(status==='ok'?'s-ok':status==='fail'?'s-fail':'s-pending');btn.textContent=status==='ok'?'V':status==='fail'?'X':'?';}saveFB();}
+function setSerieStatus(dk2,ei,si,status){const sk=dk2+'_'+localDateStr(new Date());if(!SESSIONS[sk])SESSIONS[sk]={exs:{}};if(!SESSIONS[sk].exs[ei])SESSIONS[sk].exs[ei]={series:{},charge:0,ressenti:null};if(!SESSIONS[sk].exs[ei].series[si])SESSIONS[sk].exs[ei].series[si]={};SESSIONS[sk].exs[ei].series[si].status=status;const btn=document.getElementById('sb_'+dk2+'_'+ei+'_'+si);if(btn){btn.className='serie-ok '+(status==='ok'?'s-ok':status==='fail'?'s-fail':'s-pending');btn.textContent=status==='ok'?'V':status==='fail'?'X':'?';}saveFB();}
 function setRessenti(dk2,ei,r){const sk=dk2+'_'+localDateStr(new Date());if(!SESSIONS[sk])SESSIONS[sk]={exs:{}};if(!SESSIONS[sk].exs[ei])SESSIONS[sk].exs[ei]={series:{},charge:0,ressenti:null};SESSIONS[sk].exs[ei].ressenti=r;['easy','ok','hard'].forEach(v=>{const b=document.getElementById('r_'+dk2+'_'+ei+'_'+v);if(b)b.className='r-btn'+(r===v?' sel-'+v:'');});saveFB();}
 function toggleSpDay(id){const b=document.getElementById("body_"+id),c=document.getElementById("chev_"+id);if(!b)return;const o=b.style.display==="none";b.style.display=o?"block":"none";if(c)c.innerHTML=o?"&#9660;":"&#9654;";}
 
@@ -1401,7 +1404,7 @@ function rSp(){
         return '<div class="serie-item">'+
           '<div class="serie-lbl">S'+(si+1)+'</div>'+
           '<div class="serie-reps">'+
-            '<input type="number" inputmode="numeric" min="0" max="99" placeholder="'+tgt+'" style="width:40px" class="inp-s" data-k="'+se.key+'" data-i="'+i+'" data-s="'+si+'" data-t="'+tgt+'">'+
+            '<input type="number" inputmode="numeric" min="0" max="99" placeholder="'+tgt+'" value="'+(curEx.series&&curEx.series[si]&&curEx.series[si].reps||'')+'" style="width:40px" class="inp-s" data-k="'+se.key+'" data-i="'+i+'" data-s="'+si+'" data-t="'+tgt+'" onblur="saveRepsOnBlur(this)">'+
             '<span class="serie-target">/ '+ex.r+'</span>'+
           '</div>'+
           (ex.base>0?'<input type="number" inputmode="decimal" step="0.5" value="'+(lastCharge===0?'':lastCharge)+'" placeholder="'+ex.base+'" class="inp-sc" data-k="'+se.key+'" data-i="'+i+'" data-s="'+si+'" style="width:42px;background:var(--bg3);border:1px solid rgba(255,209,102,0.4);border-radius:4px;color:var(--acc4);padding:3px 4px;font-family:Barlow Condensed,sans-serif;font-size:12px;font-weight:700;text-align:center"><span style="font-size:10px;color:var(--txt2)">kg</span>':'')+
@@ -1655,7 +1658,7 @@ function setAliTab(tab,el){
 
 // MENU BUILDER
 const JOURS=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
-const SLOTS=['Petit dejeuner','Dejeuner','En-cas 16h','Diner','Post-seance'];
+const SLOTS=['Petit dejeuner','Dejeuner','En-cas 16h','En-cas 2','Diner','Post-seance'];
 const SPORTS_J=['Pecs + Triceps','Jambes + Abdos','Recuperation','Pecs S2 + Epaules','Dos + Biceps','Rando ou Repos','Repos ou Rando'];
 const DEF_MENUS=[
   [{slot:'Petit dejeuner',nom:'Pure Granola Sportif (avec 30g de Whey) avec lait Soja',cal:388,p:43,g:27,l:11},{slot:'Post-seance',nom:'Whey isolat 30g (2 dosettes)',cal:113,p:26,g:0,l:0},{slot:'Dejeuner',nom:'Roti de boeuf & haricots verts',cal:569,p:57,g:21,l:30},{slot:'En-cas 16h',nom:'Jambon',cal:173,p:34,g:1,l:4},{slot:'Diner',nom:'Omelette Jambon fromage',cal:563,p:43,g:6,l:41}],
@@ -2589,9 +2592,9 @@ function renderMesuresGraphs(){
   if(lg2)lg2.innerHTML='<span style="font-size:11px;color:var(--txt2)">Volume depuis 06/04/2026</span>';
   if(c2)CH['gMesures2']=new Chart(c2,{type:'line',data:{labels:dates,datasets:[
     {label:'Biceps D',data:dates.map(function(d){return m[d].bicepsD||null;}),borderColor:'#ffd166',backgroundColor:'rgba(255,209,102,0.08)',tension:0.3,pointRadius:5,borderWidth:2,fill:false},
-    {label:'Biceps G',data:dates.map(function(d){return m[d].bicepsG||null;}),borderColor:'#f59e0b',backgroundColor:'transparent',tension:0.3,pointRadius:5,borderWidth:2,fill:false},
-    {label:'Cuisse D',data:dates.map(function(d){return m[d].cuisseD||null;}),borderColor:'#00e5a0',backgroundColor:'rgba(0,229,160,0.08)',tension:0.3,pointRadius:5,borderWidth:2,fill:false},
-    {label:'Cuisse G',data:dates.map(function(d){return m[d].cuisseG||null;}),borderColor:'#6ee7b7',backgroundColor:'transparent',tension:0.3,pointRadius:5,borderWidth:2,fill:false}
+    {label:'Biceps G',data:dates.map(function(d){return m[d].bicepsG||null;}),borderColor:'#4a9eff',backgroundColor:'rgba(74,158,255,0.08)',tension:0.3,pointRadius:5,borderWidth:2,fill:false},
+    {label:'Cuisse D',data:dates.map(function(d){return m[d].cuisseD||null;}),borderColor:'#ff6b6b',backgroundColor:'rgba(255,107,107,0.08)',tension:0.3,pointRadius:5,borderWidth:2,fill:false},
+    {label:'Cuisse G',data:dates.map(function(d){return m[d].cuisseG||null;}),borderColor:'#00e5a0',backgroundColor:'transparent',tension:0.3,pointRadius:5,borderWidth:2,fill:false}
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8b90a8',font:{family:'Barlow Condensed',size:11}}}},scales:{x:Object.assign({},GS.x),y:Object.assign({},GS.y,{title:{display:true,text:'cm',color:'#8b90a8'}})}}});
 }
 
@@ -2835,37 +2838,88 @@ function dElCompo(d){
 // BRAS PHASE 6
 (function(){
   var newBras=[
-    {id:"curl_biceps",nom:"Curl Biceps",jour:"Bras",muscles:"Biceps, Brachial",conseils:"Pieds largeur des épaules. Saisissez la barre bras le long du corps, paumes vers le haut. Fixez coudes contre votre buste. Gardez dos droit, épaules abaissées. Montez les mains vers les épaules en contractant le biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes, ne balancez pas le buste. Contractez fort en haut et contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:30,video:"curl_biceps",fav:false,custom:false},
-    {id:"curl_biceps_poulie_basse",nom:"Curl Biceps Poulie Basse",jour:"Bras",muscles:"Biceps, Brachial",conseils:"Saisissez les poignées avec les paumes vers le haut, bras le long du corps. Engagez abdos et gardez dos droit. Pliez les coudes pour remonter vers les épaules en contractant les biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps pour isoler le biceps. Contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:30,video:"curl_biceps_poulie_basse",fav:false,custom:false},
-    {id:"curl_biceps_poignees",nom:"Curl Biceps Poignées",jour:"Bras",muscles:"Biceps, Brachial",conseils:"Saisissez poignées avec paumes vers le haut, bras le long du corps. Engagez abdos et gardez dos droit. Pliez coudes pour remonter vers les épaules en contractant les biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:25,chargeConfirme:40,video:"curl_biceps_poignees",fav:false,custom:false},
-    {id:"curl_biceps_pronation",nom:"Curl Biceps Pronation",jour:"Bras",muscles:"Brachial, Brachioradial",conseils:"Saisissez la barre avec une prise pronation (paumes vers le bas), bras le long du corps. Engagez les abdos et gardez le dos droit. Pliez les coudes pour remonter la barre vers les épaules. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:35,video:"curl_biceps_pronation",fav:false,custom:false},
-    {id:"curl_biceps_face_porte",nom:"Curl Biceps Face Porte",jour:"Bras",muscles:"Biceps, Brachial",conseils:"Face à l ancrage, pieds largeur épaules, barre en prise supination (paumes vers le haut). Engagez abdos et gardez dos droit. Pliez les coudes pour remonter la barre vers les épaules. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:20,chargeInter:25,chargeConfirme:30,video:"curl_biceps_face_porte",fav:false,custom:false},
-    {id:"curl_marteau",nom:"Curl Marteau",jour:"Bras",muscles:"Brachial, Brachioradial",conseils:"Saisissez chaque poignée paumes face à face. Engagez les abdos et gardez dos droit. Pliez les coudes pour remonter les mains vers les épaules en contractant biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:25,chargeConfirme:35,video:"curl_marteau",fav:false,custom:false},
-    {id:"curl_marteau_poulie_basse",nom:"Curl Marteau Poulie Basse",jour:"Bras",muscles:"Brachial, Brachioradial, Biceps",conseils:"Saisissez poignées avec une prise marteau paumes face à face. Engagez les abdos et gardez dos droit. Pliez les coudes pour remonter les mains vers les épaules. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:30,chargeConfirme:35,video:"curl_marteau_poulie_basse",fav:false,custom:false},
-    {id:"dips",nom:"Dips",jour:"Bras",muscles:"Triceps",conseils:"Position sur les barres, bras tendus. Descendez en fléchissant les coudes jusqu'à ce que les épaules soient au niveau des coudes. Remontez en poussant fort.",erreurs:"Gardez le buste droit pour cibler les triceps.",chargeDebutant:null,chargeInter:null,chargeConfirme:null,video:"dips",fav:false,custom:false},
-    {id:"extension_triceps_poulie_haute",nom:"Extension Triceps Poulie Haute",jour:"Bras",muscles:"Triceps",conseils:"Saisissez l élastique avec les deux mains, bras pliés au niveau de la poitrine. Engagez abdos et gardez dos droit. Etendez les bras vers l arrière et vers le bas en verrouillant légèrement les coudes. Revenez lentement.",erreurs:"Gardez coudes fixes et proches du corps pour isoler les triceps. Contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:35,video:"extension_triceps_poulie_haute",fav:false,custom:false},
-    {id:"extension_triceps_verticale",nom:"Extension Triceps Verticale",jour:"Bras",muscles:"Triceps",conseils:"Saisissez une poignée dans chaque main, bras derrière la nuque, coudes pointés vers le haut. Buste droit, abdos engagés. Etendez les bras vers le haut jusqu à verrouiller légèrement les coudes. Redescendez lentement.",erreurs:"Gardez les coudes près de la tête et immobiles. Contrôlez la descente.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"extension_triceps_verticale",fav:false,custom:false},
-    {id:"extension_triceps_verticale_pb",nom:"Extension Triceps Verticale Poulie Basse",jour:"Bras",muscles:"Triceps",conseils:"Saisissez une poignée dans chaque main, bras derrière la nuque, coudes pointés vers le haut. Buste droit, abdos engagés. Etendez les bras vers le haut. Redescendez lentement.",erreurs:"Gardez les coudes près de la tête et immobiles. Contrôlez la descente.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"extension_triceps_verticale_pb",fav:false,custom:false},
-    {id:"kickback_triceps_pb",nom:"Kickback Triceps Poulie Basse",jour:"Bras",muscles:"Triceps",conseils:"Tenez l élastique dans chaque main, bras fléchis à 90 degrés et coudes près du corps. Penchez légèrement le buste en avant. Poussez les mains vers l arrière, bras tendus. Revenez lentement.",erreurs:"Gardez les coudes près du corps et immobiles. Evitez de trop pencher le buste.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"kickback_triceps_pb",fav:false,custom:false},
-    {id:"kickback_triceps_uni",nom:"Kickback Triceps Unilatéral",jour:"Bras",muscles:"Triceps",conseils:"Placez l élastique sous le pied et tenez les 2 extrémités dans la main. Penchez légèrement le buste en avant, genou opposé fléchi. Poussez la main vers l arrière, bras tendu. Revenez lentement. Changez de bras.",erreurs:"Gardez le coude immobile et proche du corps. Maintenez le buste stable.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"kickback_triceps_uni",fav:false,custom:false},
-    {id:"smartpress_curl_biceps",nom:"SmartPress Curl Biceps",jour:"Bras",muscles:"Biceps, Brachial",conseils:"Position à genou, fixez le SmartPress sur la barre. Saisissez la barre bras le long du corps, paumes vers le haut. Fixez coudes contre votre buste. Montez les mains vers les épaules en contractant le biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes, ne balancez pas le buste. Contractez fort en haut et contrôlez la descente.",chargeDebutant:15,chargeInter:30,chargeConfirme:50,video:"smartpress_curl_biceps",fav:false,custom:false}
+    {id:"curl_biceps",nom:"Curl Biceps",jour:"Bras",muscles:"Biceps (Chef court + Chef long), Brachial",conseils:"Pieds largeur des épaules. Saisissez la barre bras le long du corps, paumes vers le haut. Fixez coudes contre votre buste. Gardez dos droit, épaules abaissées. Montez les mains vers les épaules en contractant le biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes, ne balancez pas le buste. Contractez fort en haut et contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:30,video:"curl_biceps",fav:false,custom:false},
+    {id:"curl_biceps_poulie_basse",nom:"Curl Biceps Poulie Basse",jour:"Bras",muscles:"Biceps (tension constante), Brachial",conseils:"Saisissez les poignées avec les paumes vers le haut, bras le long du corps. Engagez abdos et gardez dos droit. Pliez les coudes pour remonter vers les épaules en contractant les biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps pour isoler le biceps. Contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:30,video:"curl_biceps_poulie_basse",fav:false,custom:false},
+    {id:"curl_biceps_poignees",nom:"Curl Biceps Poignées",jour:"Bras",muscles:"Biceps (Chef court + Chef long), Brachial",conseils:"Saisissez poignées avec paumes vers le haut, bras le long du corps. Engagez abdos et gardez dos droit. Pliez coudes pour remonter vers les épaules en contractant les biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:25,chargeConfirme:40,video:"curl_biceps_poignees",fav:false,custom:false},
+    {id:"curl_biceps_pronation",nom:"Curl Biceps Pronation",jour:"Bras",muscles:"Brachial (focus), Brachioradial - avant-bras",conseils:"Saisissez la barre avec une prise pronation (paumes vers le bas), bras le long du corps. Engagez les abdos et gardez le dos droit. Pliez les coudes pour remonter la barre vers les épaules. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:35,video:"curl_biceps_pronation",fav:false,custom:false},
+    {id:"curl_biceps_face_porte",nom:"Curl Biceps Face Porte",jour:"Bras",muscles:"Biceps (isolation - angle horizontal), Brachial",conseils:"Face à l ancrage, pieds largeur épaules, barre en prise supination (paumes vers le haut). Engagez abdos et gardez dos droit. Pliez les coudes pour remonter la barre vers les épaules. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:20,chargeInter:25,chargeConfirme:30,video:"curl_biceps_face_porte",fav:false,custom:false},
+    {id:"curl_marteau",nom:"Curl Marteau",jour:"Bras",muscles:"Brachial (focus), Brachioradial, Biceps (Chef long)",conseils:"Saisissez chaque poignée paumes face à face. Engagez les abdos et gardez dos droit. Pliez les coudes pour remonter les mains vers les épaules en contractant biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:25,chargeConfirme:35,video:"curl_marteau",fav:false,custom:false},
+    {id:"curl_marteau_poulie_basse",nom:"Curl Marteau Poulie Basse",jour:"Bras",muscles:"Brachial (focus), Brachioradial, Biceps (Chef long) - tension constante",conseils:"Saisissez poignées avec une prise marteau paumes face à face. Engagez les abdos et gardez dos droit. Pliez les coudes pour remonter les mains vers les épaules. Redescendez lentement.",erreurs:"Gardez coudes fixes et près du corps. Contrôlez la descente.",chargeDebutant:15,chargeInter:30,chargeConfirme:35,video:"curl_marteau_poulie_basse",fav:false,custom:false},
+    {id:"dips",nom:"Dips",jour:"Bras",muscles:"Triceps (Chef long + Latéral), Grand Pectoral (Bas)",conseils:"Position sur les barres, bras tendus. Descendez en fléchissant les coudes jusqu'à ce que les épaules soient au niveau des coudes. Remontez en poussant fort.",erreurs:"Gardez le buste droit pour cibler les triceps.",chargeDebutant:null,chargeInter:null,chargeConfirme:null,video:"dips",fav:false,custom:false},
+    {id:"extension_triceps_poulie_haute",nom:"Extension Triceps Poulie Haute",jour:"Bras",muscles:"Triceps (Chef médial + Latéral - isolation)",conseils:"Saisissez l élastique avec les deux mains, bras pliés au niveau de la poitrine. Engagez abdos et gardez dos droit. Etendez les bras vers l arrière et vers le bas en verrouillant légèrement les coudes. Revenez lentement.",erreurs:"Gardez coudes fixes et proches du corps pour isoler les triceps. Contrôlez la descente.",chargeDebutant:15,chargeInter:20,chargeConfirme:35,video:"extension_triceps_poulie_haute",fav:false,custom:false},
+    {id:"extension_triceps_verticale",nom:"Extension Triceps Verticale",jour:"Bras",muscles:"Triceps (Chef long - masse)",conseils:"Saisissez une poignée dans chaque main, bras derrière la nuque, coudes pointés vers le haut. Buste droit, abdos engagés. Etendez les bras vers le haut jusqu à verrouiller légèrement les coudes. Redescendez lentement.",erreurs:"Gardez les coudes près de la tête et immobiles. Contrôlez la descente.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"extension_triceps_verticale",fav:false,custom:false},
+    {id:"extension_triceps_verticale_pb",nom:"Extension Triceps Verticale Poulie Basse",jour:"Bras",muscles:"Triceps (Chef long - masse, tension constante)",conseils:"Saisissez une poignée dans chaque main, bras derrière la nuque, coudes pointés vers le haut. Buste droit, abdos engagés. Etendez les bras vers le haut. Redescendez lentement.",erreurs:"Gardez les coudes près de la tête et immobiles. Contrôlez la descente.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"extension_triceps_verticale_pb",fav:false,custom:false},
+    {id:"kickback_triceps_pb",nom:"Kickback Triceps Poulie Basse",jour:"Bras",muscles:"Triceps (isolation - finisher)",conseils:"Tenez l élastique dans chaque main, bras fléchis à 90 degrés et coudes près du corps. Penchez légèrement le buste en avant. Poussez les mains vers l arrière, bras tendus. Revenez lentement.",erreurs:"Gardez les coudes près du corps et immobiles. Evitez de trop pencher le buste.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"kickback_triceps_pb",fav:false,custom:false},
+    {id:"kickback_triceps_uni",nom:"Kickback Triceps Unilatéral",jour:"Bras",muscles:"Triceps (isolation unilatérale - finisher)",conseils:"Placez l élastique sous le pied et tenez les 2 extrémités dans la main. Penchez légèrement le buste en avant, genou opposé fléchi. Poussez la main vers l arrière, bras tendu. Revenez lentement. Changez de bras.",erreurs:"Gardez le coude immobile et proche du corps. Maintenez le buste stable.",chargeDebutant:10,chargeInter:15,chargeConfirme:20,video:"kickback_triceps_uni",fav:false,custom:false},
+    {id:"smartpress_curl_biceps",nom:"SmartPress Curl Biceps",jour:"Bras",muscles:"Biceps (Chef court + Chef long), Brachial - charges lourdes",conseils:"Position à genou, fixez le SmartPress sur la barre. Saisissez la barre bras le long du corps, paumes vers le haut. Fixez coudes contre votre buste. Montez les mains vers les épaules en contractant le biceps. Redescendez lentement.",erreurs:"Gardez coudes fixes, ne balancez pas le buste. Contractez fort en haut et contrôlez la descente.",chargeDebutant:15,chargeInter:30,chargeConfirme:50,video:"smartpress_curl_biceps",fav:false,custom:false}
   ];
   newBras.forEach(function(ex){EX_DB=EX_DB.filter(function(e){return e.id!==ex.id;});EX_DB.push(ex);});
   var vids={
-  "curl_biceps":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Curl_Biceps.mp4",
-  "curl_biceps_poulie_basse":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Curl_Biceps_Poulie_Basse.mp4",
-  "curl_biceps_poignees":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Curl_Biceps_Poignees.mp4",
-  "curl_biceps_pronation":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Curl_Biceps_Pronation.mp4",
-  "curl_biceps_face_porte":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Curl_Biceps_FacePorte.mp4",
-  "curl_marteau":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Curl_Marteau.mp4",
-  "curl_marteau_poulie_basse":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Curl_Marteau_Poulie_Basse.mp4",
-  "dips":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Dips.mp4",
-  "extension_triceps_poulie_haute":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Extension_Triceps_Poulie_Haute.mp4",
-  "extension_triceps_verticale":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Extension_Triceps_Verticale.mp4",
-  "extension_triceps_verticale_pb":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Extension_Triceps_Verticale_Poulie_Basse.mp4",
-  "kickback_triceps_pb":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Kickback_Triceps_Poulie_Basse.mp4",
-  "kickback_triceps_uni":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/Kickback_Triceps_Unilat%C3%A9ral.mp4",
-  "smartpress_curl_biceps":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/soutiens-gorge/SmartPress_Curl_Biceps.mp4"
+  "curl_biceps":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Curl_Biceps.mp4",
+  "curl_biceps_poulie_basse":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Curl_Biceps_Poulie_Basse.mp4",
+  "curl_biceps_poignees":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Curl_Biceps_Poignees.mp4",
+  "curl_biceps_pronation":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Curl_Biceps_Pronation.mp4",
+  "curl_biceps_face_porte":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Curl_Biceps_FacePorte.mp4",
+  "curl_marteau":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Curl_Marteau.mp4",
+  "curl_marteau_poulie_basse":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Curl_Marteau_Poulie_Basse.mp4",
+  "dips":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Dips.mp4",
+  "extension_triceps_poulie_haute":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Extension_Triceps_Poulie_Haute.mp4",
+  "extension_triceps_verticale":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Extension_Triceps_Verticale.mp4",
+  "extension_triceps_verticale_pb":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Extension_Triceps_Verticale_Poulie_Basse.mp4",
+  "kickback_triceps_pb":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Kickback_Triceps_Poulie_Basse.mp4",
+  "kickback_triceps_uni":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/Kickback_Triceps_Unilat%C3%A9ral.mp4",
+  "smartpress_curl_biceps":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/arm/SmartPress_Curl_Biceps.mp4"
+  };
+  Object.assign(EX_VIDEOS,vids);
+})();
+
+function saveRepsOnBlur(inp){
+  var v=parseFloat(inp.value);
+  if(isNaN(v)||v<=0)return;
+  var t=parseFloat(inp.dataset.t)||1;
+  var sk=inp.dataset.k+'_'+localDateStr(new Date());
+  var ei=parseInt(inp.dataset.i);
+  var si=parseInt(inp.dataset.s);
+  var status=v>=t?'ok':'fail';
+  if(!SESSIONS[sk])SESSIONS[sk]={exs:{}};
+  if(!SESSIONS[sk].exs[ei])SESSIONS[sk].exs[ei]={series:{},charge:null,ressenti:null};
+  if(!SESSIONS[sk].exs[ei].series)SESSIONS[sk].exs[ei].series={};
+  // Save reps AND status together - never overwrite
+  var cur=SESSIONS[sk].exs[ei].series[si]||{};
+  SESSIONS[sk].exs[ei].series[si]=Object.assign(cur,{reps:v,status:status});
+  // Update button visually
+  var btn=document.getElementById('sb_'+inp.dataset.k+'_'+ei+'_'+si);
+  if(btn){
+    btn.className='serie-ok '+(status==='ok'?'s-ok':'s-fail')+' btn-s';
+    btn.textContent=status==='ok'?'V':'X';
+  }
+  saveFB();
+}
+
+// JAMBES PHASE 6
+(function(){
+  var newJambes=[
+    {id:"extension_mollets",nom:"Extension Mollets",jour:"Jambes",muscles:"Mollets (Gastrocnémien + Soléaire)",conseils:"Debout, montez sur la pointe des pieds en contractant les mollets. Redescendez lentement.",erreurs:"Contrôlez la descente, ne tombez pas.",chargeDebutant:null,chargeInter:null,chargeConfirme:null,video:"extension_mollets",fav:false,custom:false},
+    {id:"fente_arriere_elastique",nom:"Fente Arrière Elastique",jour:"Jambes",muscles:"Quadriceps (Haut), Grand Fessier",conseils:"Pieds largeur hanches, buste droit et abdos engagés. Faites un pas en arrière pour initier la fente. Fléchissez les deux genoux jusqu au genou arrière proche du sol, genou avant aligné avec la cheville. Poussez sur le talon avant pour revenir.",erreurs:"Gardez buste droit et genou avant aligné avec la cheville.",chargeDebutant:5,chargeInter:15,chargeConfirme:30,video:"fente_arriere_elastique",fav:false,custom:false},
+    {id:"fentes_bulgares_face",nom:"Fentes Bulgares Face",jour:"Jambes",muscles:"Quadriceps (Focus unilatéral - isolation intense), Grand Fessier",conseils:"Placez une chaise derrière vous pour poser le pied arrière. Buste droit et abdos engagés. Fléchissez le genou avant pour descendre, genou arrière proche du sol. Poussez sur le talon avant pour revenir.",erreurs:"Buste droit, abdos engagés. Genou avant ne dépasse pas la pointe du pied.",chargeDebutant:15,chargeInter:30,chargeConfirme:60,video:"fentes_bulgares_face",fav:false,custom:false},
+    {id:"fentes_jambes_barre",nom:"Fentes Jambes Barre",jour:"Jambes",muscles:"Quadriceps, Grand Fessier, Ischio-jambiers",conseils:"Pieds largeur hanches, buste droit et abdos engagés. Fléchissez le genou avant pour descendre jusqu au genou arrière proche du sol. Poussez sur le talon avant pour revenir.",erreurs:"Buste droit, abdos engagés et genou avant aligné avec la cheville.",chargeDebutant:15,chargeInter:25,chargeConfirme:40,video:"fentes_jambes_barre",fav:false,custom:false},
+    {id:"fentes_sautees",nom:"Fentes Sautées",jour:"Jambes",muscles:"Quadriceps, Grand Fessier, Cardio/Explosivité",conseils:"Position de fente, sautez et alternez les jambes en l air. Réceptionnez en douceur en position de fente.",erreurs:"Réception douce pour protéger les genoux.",chargeDebutant:null,chargeInter:null,chargeConfirme:null,video:"fentes_sautees",fav:false,custom:false},
+    {id:"front_squat",nom:"Front Squat",jour:"Jambes",muscles:"Quadriceps (Focus avant), Grand Fessier",conseils:"Barre sur le devant des épaules, coudes hauts, buste droit et abdos engagés. Pieds écartés largeur épaules, orteils légèrement tournés vers l extérieur. Descendez en squat jusqu aux cuisses parallèles au sol. Poussez sur les talons pour revenir.",erreurs:"Buste droit et coudes hauts. Genoux alignés avec les pieds.",chargeDebutant:15,chargeInter:25,chargeConfirme:35,video:"front_squat",fav:false,custom:false},
+    {id:"good_morning",nom:"Good Morning",jour:"Jambes",muscles:"Ischio-jambiers, Grand Fessier, Erecteurs du rachis",conseils:"Barre sur les épaules derrière le cou, pieds largeur hanches, buste droit et abdos engagés. Penchez le buste en avant depuis les hanches, dos droit. Descendez jusqu à sentir l étirement dans les ischio-jambiers. Revenez sous contrôle.",erreurs:"Dos bien droit tout au long du mouvement.",chargeDebutant:20,chargeInter:30,chargeConfirme:40,video:"good_morning",fav:false,custom:false},
+    {id:"leg_curl_poulie_basse",nom:"Leg Curl Poulie Basse",jour:"Jambes",muscles:"Ischio-jambiers (isolation)",conseils:"Couché sur le ventre, abdos engagés, pieds largeur des hanches. Fléchissez les genoux pour tirer le talon vers les fessiers, bassin stable. Revenez lentement.",erreurs:"Gardez le bassin stable. Concentrez-vous sur les ischio-jambiers.",chargeDebutant:15,chargeInter:25,chargeConfirme:30,video:"leg_curl_poulie_basse",fav:false,custom:false},
+    {id:"leg_extension_uni",nom:"Leg Extension Unilatérale",jour:"Jambes",muscles:"Quadriceps (isolation pure)",conseils:"Assis sur une chaise, dos droit et pieds à plat. Tendez lentement la jambe devant vous en contractant le quadriceps. Redescendez lentement sous contrôle.",erreurs:"Buste droit et abdos engagés. Ne verrouillez pas complètement le genou.",chargeDebutant:10,chargeInter:15,chargeConfirme:25,video:"leg_extension_uni",fav:false,custom:false}
+  ];
+  newJambes.forEach(function(ex){EX_DB=EX_DB.filter(function(e){return e.id!==ex.id;});EX_DB.push(ex);});
+  var vids={
+  "extension_mollets":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Extension_Mollets.mp4",
+  "fente_arriere_elastique":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Fentes_Arriere_Elastique.mp4",
+  "fentes_bulgares_face":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Fentes_Bulgares_Face.mp4",
+  "fentes_jambes_barre":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Fentes_Jambes_Barre.mp4",
+  "fentes_sautees":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Fentes_Sautees.mp4",
+  "front_squat":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Front_Squat.mp4",
+  "good_morning":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Good_Morning.mp4",
+  "leg_curl_poulie_basse":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Leg_Curl_Poulie_Basse.mp4",
+  "leg_extension_uni":"https://raw.githubusercontent.com/atyc69-stack/challenge2026/main/videos/Jambes/Leg_Exstension_Unilaterale.mp4"
   };
   Object.assign(EX_VIDEOS,vids);
 })();
