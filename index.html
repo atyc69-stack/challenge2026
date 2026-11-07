@@ -990,7 +990,7 @@ function rDB(){
     var html='<div class="obj-card"><div class="obj-title">✨ Sommet Intérieur</div>';
     // Etape 1
     if(m1){
-      html+='<div style="display:flex;align-items:center;gap:6px;margin-top:6px"><span style="color:#00e5a0;font-size:13px">✅ Étape 1 : &lt; 100 kg</span><span style="color:var(--txt2);font-size:11px">'+fd(m1)+'</span></div>';
+      html+='<div onclick="uncheckMilestone(\'milestone_100kg\')" title="Toucher pour décocher" style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><span style="color:#00e5a0;font-size:13px">✅ Étape 1 : &lt; 100 kg</span><span style="color:var(--txt2);font-size:11px">'+fd(m1)+'</span><span style="margin-left:auto;font-size:10px;color:var(--txt2);border:1px solid var(--brd);border-radius:4px;padding:1px 6px">décocher</span></div>';
     } else {
       var dist1=mP!=null?(Math.round((mP-TGT1)*100)/100).toFixed(2):null;
       var pct1=mP!=null?Math.min(100,Math.max(0,(SW-mP)/(SW-TGT1)*100)).toFixed(0):0;
@@ -1001,7 +1001,7 @@ function rDB(){
     }
     // Etape 2
     if(m2){
-      html+='<div style="display:flex;align-items:center;gap:6px;margin-top:6px"><span style="color:#00e5a0;font-size:13px">✅ Étape 2 : &lt; 90 kg</span><span style="color:var(--txt2);font-size:11px">'+fd(m2)+'</span></div>';
+      html+='<div onclick="uncheckMilestone(\'milestone_90kg\')" title="Toucher pour décocher" style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><span style="color:#00e5a0;font-size:13px">✅ Étape 2 : &lt; 90 kg</span><span style="color:var(--txt2);font-size:11px">'+fd(m2)+'</span><span style="margin-left:auto;font-size:10px;color:var(--txt2);border:1px solid var(--brd);border-radius:4px;padding:1px 6px">décocher</span></div>';
     } else if(m1) {
       var dist2=mP!=null?(Math.round((mP-TGT2)*100)/100).toFixed(2):null;
       var pct2=mP!=null?Math.min(100,Math.max(0,(TGT1-mP)/(TGT1-TGT2)*100)).toFixed(0):0;
@@ -1585,6 +1585,23 @@ function rGR(){
   }
 }
 
+function uncheckMilestone(key){
+  if(!confirm('Décocher cette étape ?'))return;
+  delete SESSIONS[key];
+  saveFB();rDB();toast('Étape décochée');
+}
+var EDIT_DATE=null;
+function edEl(d){
+  var e=DATA.find(function(x){return x.date===d;});
+  if(!e)return;
+  var set=function(id,v){var el=document.getElementById(id);if(el)el.value=(v==null?'':v);};
+  set('iD',e.date);set('iP',e.p);set('iG',e.g);set('iE',e.e);set('iM',e.m);set('iN',e.note||e.n||'');
+  ['gBD','gBG','gTR','gJD','gJG','mBD','mBG','mTR','mJD','mJG'].forEach(function(k){set(k,e[k]);});
+  EDIT_DATE=d;
+  var b=document.querySelector('#sa .fa .bp');if(b)b.textContent='Mettre à jour '+fd(d);
+  var f=document.getElementById('iD');if(f&&f.scrollIntoView)f.scrollIntoView({behavior:'smooth',block:'center'});
+  toast('Modifie les valeurs puis appuie sur « Mettre à jour »');
+}
 function svE(){
   var ds=document.getElementById('iD')?document.getElementById('iD').value:localDateStr(new Date());
   if(!ds)ds=localDateStr(new Date());
@@ -1603,12 +1620,18 @@ function svE(){
     if(v)entry[id]=v;
   });
   var idx2=DATA.findIndex(function(d){return d.date===ds;});
-  if(idx2>=0){DATA[idx2]=Object.assign(DATA[idx2],entry);}
+  if(idx2>=0&&EDIT_DATE===ds){
+    ['p','g','e','m','n','note','gBD','gBG','gTR','gJD','gJG','mBD','mBG','mTR','mJD','mJG'].forEach(function(k){delete DATA[idx2][k];});
+    DATA[idx2]=Object.assign(DATA[idx2],entry);
+  }
+  else if(idx2>=0){DATA[idx2]=Object.assign(DATA[idx2],entry);}
   else{DATA.push(entry);DATA.sort(function(a,b){return a.date.localeCompare(b.date);});}
   saveFB();
   rSa();rDB();
   // Clear fields
   ['iP','iG','iE','iM','iN','gBD','gBG','gTR','gJD','gJG','mBD','mBG','mTR','mJD','mJG'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  EDIT_DATE=null;
+  var bb=document.querySelector('#sa .fa .bp');if(bb)bb.textContent='Enregistrer tout';
   toast('Enregistré !');
 }
 function pT(){
@@ -1627,10 +1650,13 @@ function pT(){
 function rSa(){
   let s=srt().reverse();
   if(fltDays>0){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-fltDays);s=s.filter(e=>new Date(e.date)>=cutoff);}
-  document.getElementById('rTb').innerHTML=s.length?s.map((e,i)=>{const pr=s[i+1];const dl=pr&&e.p&&pr.p?+(e.p-pr.p).toFixed(1):null;const dc=dl===null?'':dl<0?'dp':dl>0?'dn':'';const ds=dl===null?'':dl<0?dl.toFixed(1):'+'+dl.toFixed(1);return'<tr><td>'+fd(e.date)+'</td><td>'+(e.p||'-')+' kg</td><td class="'+dc+'">'+ds+'</td><td>'+nf(e.g,'%')+'</td><td>'+nf(e.e,'%')+'</td><td>'+nf(e.m,' kg')+'</td><td>'+(e.n||'')+'</td><td><button onclick="dEl(\''+e.date+'\')" style="border:none;background:none;cursor:pointer;color:#ff6b6b;font-size:14px;padding:4px 8px">x</button></td></tr>';}).join(''):'<tr><td colspan="8" style="color:var(--txt2);padding:12px">Aucune donnee</td></tr>';
+  var dlt=function(a,b){return(a!=null&&b!=null)?+(a-b).toFixed(1):null;};
+  var fmtD=function(v,goodNeg){if(v===null)return'<td></td>';var c=v===0?'':((goodNeg?v<0:v>0)?'dp':'dn');return'<td class="'+c+'">'+(v>0?'+':'')+v.toFixed(1)+'</td>';};
+  document.getElementById('rTb').innerHTML=s.length?s.map((e,i)=>{const pr=s[i+1]||{};
+    return'<tr><td>'+fd(e.date)+'</td><td>'+(e.p||'-')+' kg</td>'+fmtD(dlt(e.p,pr.p),true)+'<td>'+nf(e.g,'%')+'</td>'+fmtD(dlt(e.g,pr.g),true)+'<td>'+nf(e.e,'%')+'</td>'+fmtD(dlt(e.e,pr.e),false)+'<td>'+nf(e.m,' kg')+'</td>'+fmtD(dlt(e.m,pr.m),false)+'<td>'+(e.note||e.n||'')+'</td><td style="white-space:nowrap"><button onclick="edEl(\''+e.date+'\')" title="Modifier" style="border:none;background:none;cursor:pointer;color:#4a9eff;font-size:14px;padding:4px 8px">✎</button><button onclick="dEl(\''+e.date+'\')" title="Supprimer" style="border:none;background:none;cursor:pointer;color:#ff6b6b;font-size:14px;padding:4px 8px">x</button></td></tr>';}).join(''):'<tr><td colspan="11" style="color:var(--txt2);padding:12px">Aucune donnee</td></tr>';
   let sd=srt().reverse();
   if(dltFlt>0){const cutoff2=new Date();cutoff2.setDate(cutoff2.getDate()-dltFlt);sd=sd.filter(e=>new Date(e.date)>=cutoff2);}
-  document.getElementById('dTb').innerHTML=sd.filter(e=>e.gBD!=null||e.mBD!=null).map(e=>'<tr><td>'+fd(e.date)+'</td><td>'+nf(e.gBD,'%')+'</td><td>'+nf(e.gBG,'%')+'</td><td>'+nf(e.gTR,'%')+'</td><td>'+nf(e.gJD,'%')+'</td><td>'+nf(e.gJG,'%')+'</td><td>'+nf(e.mBD,' kg')+'</td><td>'+nf(e.mBG,' kg')+'</td><td>'+nf(e.mTR,' kg')+'</td><td>'+nf(e.mJD,' kg')+'</td><td>'+nf(e.mJG,' kg')+'</td></tr>').join('')||'<tr><td colspan="11" style="color:var(--txt2);padding:12px">Aucune</td></tr>';}
+  document.getElementById('dTb').innerHTML=sd.filter(e=>e.gBD!=null||e.mBD!=null).map(e=>'<tr><td>'+fd(e.date)+'</td><td>'+nf(e.gBD,'%')+'</td><td>'+nf(e.gBG,'%')+'</td><td>'+nf(e.gTR,'%')+'</td><td>'+nf(e.gJD,'%')+'</td><td>'+nf(e.gJG,'%')+'</td><td>'+nf(e.mBD,' kg')+'</td><td>'+nf(e.mBG,' kg')+'</td><td>'+nf(e.mTR,' kg')+'</td><td>'+nf(e.mJD,' kg')+'</td><td>'+nf(e.mJG,' kg')+'</td><td><button onclick="edEl(\''+e.date+'\')" title="Modifier" style="border:none;background:none;cursor:pointer;color:#4a9eff;font-size:14px;padding:4px 8px">✎</button></td></tr>').join('')||'<tr><td colspan="12" style="color:var(--txt2);padding:12px">Aucune</td></tr>';}
 function dEl(d){if(!confirm('Supprimer ?'))return;DATA=DATA.filter(e=>e.date!==d);saveFB();rSa();rDB();toast('Supprime');}
 
 // COACH SYSTEM
