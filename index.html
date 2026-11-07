@@ -195,7 +195,10 @@ body,input,button,select,textarea{font-family:'Barlow Condensed',sans-serif;font
   <button class="tab" onclick="sT('sa',this)">Saisie</button>
   <button class="tab" onclick="sT('sp',this)">Sport</button>
   <button class="tab" onclick="sT('ali',this)">Alimentation</button>
+  <button class="tab" onclick="sT('st',this)">Stratégie</button>
 </div>
+
+<div id="st" class="sec"></div>
 
 <!-- DASHBOARD -->
 <div id="db" class="sec on">
@@ -356,12 +359,14 @@ body,input,button,select,textarea{font-family:'Barlow Condensed',sans-serif;font
 <!-- ALIMENTATION -->
 <div id="ali" class="sec">
   <div class="filter-row" style="margin-bottom:12px">
-    <button class="fbtn on" onclick="setAliTab('menu',this)">Menu semaine</button>
+    <button class="fbtn on" onclick="setAliTab('suivi',this)">Suivi du jour</button>
+    <button class="fbtn" onclick="setAliTab('menu',this)">Menu semaine</button>
     <button class="fbtn" onclick="setAliTab('rec',this)">Recettes</button>
     <button class="fbtn" onclick="setAliTab('co',this)">Courses</button>
   </div>
+  <div id="aliSuivi"></div>
   <!-- MENU -->
-  <div id="aliMenu">
+  <div id="aliMenu" style="display:none">
     <div class="menu-week-banner">
       <div><div style="font-size:13px;font-weight:600;color:#fff" id="menuWeekLabel"></div><div style="font-size:11px;color:var(--txt2)" id="menuWeekSub"></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -549,6 +554,375 @@ body,input,button,select,textarea{font-family:'Barlow Condensed',sans-serif;font
 <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ===================== SUIVI NUTRITION (Alimentation > Suivi du jour) =====================
+var NU_DATE=null,NU_BUILT=false,NU_FOODS=[],NU_SUG=[],NU_OFF=[],NU_T=null;
+var NU_DEF={rest:{kcal:2000,p:170,l:65},train:{kcal:2200,p:170,l:65},sup:['Whey','Collagène']};
+var NU_IN='width:100%;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;color:var(--txt);padding:8px 10px;font-family:Barlow Condensed,sans-serif;font-size:15px;box-sizing:border-box';
+
+function nuEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function nuPersist(){clearTimeout(NU_T);NU_T=setTimeout(function(){saveFB();},1200);}
+function nuAddDays(ds,n){var d=new Date(ds+'T12:00:00');d.setDate(d.getDate()+n);return localDateStr(d);}
+function nuGoals(){var g=SESSIONS['nutri_goals'];if(!g||!g.rest||!g.train)g=JSON.parse(JSON.stringify(NU_DEF));if(!Array.isArray(g.sup))g.sup=NU_DEF.sup.slice();return g;}
+function nuDefTrain(ds){var w=new Date(ds+'T12:00:00').getDay();return w===1||w===3||w===5;}
+function nuDay(ds){var d=SESSIONS['nutri_'+ds]||{items:[]};if(typeof d.train!=='boolean')d.train=nuDefTrain(ds);if(!d.items)d.items=[];if(!d.sup)d.sup={};return d;}
+function nuTarget(day){var g=nuGoals()[day.train?'train':'rest'];return{kcal:g.kcal,p:g.p,l:g.l,g:Math.max(0,Math.round((g.kcal-4*g.p-9*g.l)/4))};}
+function nuItemTot(it){var f=(it.q||0)/(it.per||1);return{k:(it.b.k||0)*f,p:(it.b.p||0)*f,g:(it.b.g||0)*f,l:(it.b.l||0)*f};}
+function nuDayTot(day){var t={k:0,p:0,g:0,l:0};(day.items||[]).forEach(function(it){var x=nuItemTot(it);t.k+=x.k;t.p+=x.p;t.g+=x.g;t.l+=x.l;});return t;}
+function nuR(v){return Math.round(v);}
+
+// ---------- Analyse d'une phrase dictee ----------
+function nuNumAfter(tt,keys){
+  var re1=new RegExp('(\\d+(?:\\.\\d+)?)\\s*(?:g|gr|grammes?)?\\s*(?:de |d\')?\\s*(?:'+keys+')','i');
+  var m=tt.match(re1);
+  if(!m){var re2=new RegExp('(?:'+keys+')\\s*(?:[:=]|de |à |egal |égal )?\\s*(\\d+(?:\\.\\d+)?)','i');m=tt.match(re2);}
+  return m?{v:parseFloat(m[1]),s:m[0]}:null;
+}
+function nuParse(txt){
+  var t=(txt||'').toLowerCase().replace(/(\d),(\d)/g,'$1.$2');
+  var out={n:'',q:null,base:100,k:null,p:null,g:null,l:null};
+  var bm=t.match(/pour\s+(\d+(?:\.\d+)?)\s*(?:g|gr|grammes?|ml|cl)\b/);
+  if(bm){out.base=parseFloat(bm[1]);t=t.replace(bm[0],' ');}
+  var defs=[['k','kcal|calories?|cal'],['p','prot[ée]ines?|prot'],['g','glucides?|carbs?|hydrates? de carbone'],['l','lipides?|graisses?|mati[èe]res? grasses?']];
+  defs.forEach(function(a){var r=nuNumAfter(t,a[1]);if(r){out[a[0]]=r.v;t=t.replace(r.s,' ');}});
+  var qm=t.match(/(\d+(?:\.\d+)?)\s*(kg|g|gr|grammes?|ml|cl|l)\b/);
+  if(qm){var q=parseFloat(qm[1]),u=qm[2];if(u==='kg'||u==='l')q*=1000;else if(u==='cl')q*=10;out.q=q;
+    var after=t.slice(t.indexOf(qm[0])+qm[0].length);
+    var nm=after.match(/^\s*(?:de |d')?([a-zàâçéèêëîïôûùüÿœ' -]+?)\s*(?=[,.;:]|\bpour\b|\bsur\b|\bc'est\b|\bqui\b|$)/i);
+    if(nm)out.n=nm[1].trim();
+  }
+  return out;
+}
+function nuAnalyse(){
+  var el=document.getElementById('nuTxt');if(!el||!el.value.trim()){toast('Tape ou dicte une phrase d\'abord');return;}
+  var r=nuParse(el.value);
+  var set=function(id,v){var e=document.getElementById(id);if(e&&v!=null&&v!=='')e.value=v;};
+  set('nuN',r.n);set('nuQ',r.q);set('nuBase',r.base);set('nuK',r.k);set('nuP',r.p);set('nuG',r.g);set('nuL',r.l);
+  nuPreview();
+  toast('Vérifie les champs puis « Ajouter »');
+}
+function nuMic(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){toast('Dictée indisponible ici : utilise le micro de ton clavier');return;}
+  var r=new SR();r.lang='fr-FR';r.interimResults=false;r.maxAlternatives=1;
+  var b=document.getElementById('nuMicB');if(b)b.textContent='🎤 J\'écoute...';
+  r.onresult=function(e){var t=e.results[0][0].transcript;var el=document.getElementById('nuTxt');el.value=(el.value?el.value+' ':'')+t;nuAnalyse();};
+  r.onerror=function(e){toast('Micro : '+(e.error||'erreur'));};
+  r.onend=function(){if(b)b.textContent='🎤 Dicter';};
+  try{r.start();}catch(e){toast('Micro indisponible');}
+}
+
+// ---------- Formulaire ----------
+function nuFormVals(){
+  var g=function(id){var e=document.getElementById(id);return e?parseFloat(String(e.value).replace(',','.')):NaN;};
+  return{n:(document.getElementById('nuN').value||'').trim(),q:g('nuQ'),base:g('nuBase')||100,k:g('nuK')||0,p:g('nuP')||0,g:g('nuG')||0,l:g('nuL')||0};
+}
+function nuPreview(){
+  var v=nuFormVals(),el=document.getElementById('nuPrev');if(!el)return;
+  if(!(v.q>0)){el.textContent='Saisis la quantité mangée pour voir le total.';return;}
+  var f=v.q/v.base;
+  el.innerHTML='= <b>'+nuR(v.k*f)+' kcal</b> · P '+nuR(v.p*f)+' g · G '+nuR(v.g*f)+' g · L '+nuR(v.l*f)+' g';
+}
+function nuAdd(){
+  var v=nuFormVals();
+  if(!v.n)v.n='Aliment';
+  if(!(v.q>0)){toast('Quantité mangée manquante');return;}
+  if(!v.k&&!v.p&&!v.g&&!v.l){toast('Aucune valeur nutritionnelle');return;}
+  var day=nuDay(NU_DATE);
+  day.items=(day.items||[]).concat([{n:v.n,q:v.q,u:'g',per:v.base,b:{k:v.k,p:v.p,g:v.g,l:v.l}}]);
+  SESSIONS['nutri_'+NU_DATE]=day;
+  var foods=SESSIONS['nutri_foods']||{};foods[v.n.toLowerCase()]={n:v.n,per:v.base,k:v.k,p:v.p,g:v.g,l:v.l};SESSIONS['nutri_foods']=foods;
+  nuPersist();
+  ['nuTxt','nuN','nuQ','nuK','nuP','nuG','nuL'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  var b=document.getElementById('nuBase');if(b)b.value=100;
+  nuPreview();nuRender();toast('Ajouté');
+}
+function nuAddRecipe(i){
+  var r=RECIPES[i];if(!r)return;
+  var day=nuDay(NU_DATE);
+  day.items=(day.items||[]).concat([{n:r.nom,q:1,u:'portion',per:1,b:{k:r.cal||0,p:r.p||0,g:r.g||0,l:r.l||0}}]);
+  SESSIONS['nutri_'+NU_DATE]=day;nuPersist();nuRender();toast('Recette ajoutée');
+}
+function nuPickFood(i){
+  var f=NU_FOODS[i];if(!f)return;
+  var set=function(id,v){var e=document.getElementById(id);if(e)e.value=v;};
+  set('nuN',f.n);set('nuBase',f.per);set('nuK',f.k);set('nuP',f.p);set('nuG',f.g);set('nuL',f.l);set('nuQ','');
+  var q=document.getElementById('nuQ');if(q)q.focus();nuPreview();
+}
+function nuPickOff(i){
+  var f=NU_OFF[i];if(!f)return;
+  var set=function(id,v){var e=document.getElementById(id);if(e)e.value=v;};
+  set('nuN',f.n);set('nuBase',100);set('nuK',f.k);set('nuP',f.p);set('nuG',f.g);set('nuL',f.l);set('nuQ','');
+  var q=document.getElementById('nuQ');if(q)q.focus();nuPreview();
+}
+function nuSearch(){
+  var q=(document.getElementById('nuS').value||'').toLowerCase().trim(),box=document.getElementById('nuSug');
+  if(!q){box.innerHTML='';return;}
+  var foods=SESSIONS['nutri_foods']||{};
+  NU_FOODS=Object.keys(foods).filter(function(k){return k.indexOf(q)>=0;}).slice(0,6).map(function(k){return foods[k];});
+  var rec=[];RECIPES.forEach(function(r,i){if((r.nom||'').toLowerCase().indexOf(q)>=0&&rec.length<8)rec.push(i);});
+  var h='';
+  NU_FOODS.forEach(function(f,i){h+='<button class="bs" style="display:block;width:100%;text-align:left;margin-bottom:4px" onclick="nuPickFood('+i+')">'+nuEsc(f.n)+' <span style="color:var(--txt2)">('+nuR(f.k)+' kcal / '+f.per+' g)</span></button>';});
+  rec.forEach(function(i){var r=RECIPES[i];h+='<button class="bs" style="display:block;width:100%;text-align:left;margin-bottom:4px" onclick="nuAddRecipe('+i+')">+ '+nuEsc(r.nom)+' <span style="color:var(--txt2)">'+(r.cal||0)+' kcal · '+(r.p||0)+' g P</span></button>';});
+  box.innerHTML=h||'<div style="font-size:12px;color:var(--txt2)">Aucun résultat dans tes aliments ou recettes.</div>';
+}
+function nuOffSearch(){
+  var q=(document.getElementById('nuOffQ').value||'').trim(),box=document.getElementById('nuOffRes');
+  if(!q)return;
+  box.innerHTML='<div style="font-size:12px;color:var(--txt2)">Recherche en cours...</div>';
+  var ctl=window.AbortController?new AbortController():null,tm=setTimeout(function(){if(ctl)ctl.abort();},15000);
+  var url='https://fr.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=12&fields=product_name,brands,nutriments';
+  fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){return r.json();}).then(function(d){
+    clearTimeout(tm);
+    NU_OFF=(d.products||[]).filter(function(p){return p.product_name&&p.nutriments&&p.nutriments['energy-kcal_100g']!=null;}).slice(0,8).map(function(p){var n=p.nutriments;return{n:p.product_name+(p.brands?' ('+String(p.brands).split(',')[0]+')':''),k:+(+n['energy-kcal_100g']).toFixed(0),p:+(+n['proteins_100g']||0).toFixed(1),g:+(+n['carbohydrates_100g']||0).toFixed(1),l:+(+n['fat_100g']||0).toFixed(1)};});
+    box.innerHTML=NU_OFF.length?NU_OFF.map(function(f,i){return'<button class="bs" style="display:block;width:100%;text-align:left;margin-bottom:4px" onclick="nuPickOff('+i+')">'+nuEsc(f.n)+' <span style="color:var(--txt2)">'+f.k+' kcal · P '+f.p+' · G '+f.g+' · L '+f.l+' (pour 100 g)</span></button>';}).join(''):'<div style="font-size:12px;color:var(--txt2)">Aucun produit trouvé.</div>';
+  }).catch(function(){clearTimeout(tm);box.innerHTML='<div style="font-size:12px;color:var(--ora)">Recherche impossible (hors ligne ou trop lent). Réessaie ou saisis les valeurs de l\'étiquette.</div>';});
+}
+
+// ---------- Journal ----------
+function nuDel(i){var day=nuDay(NU_DATE);day.items.splice(i,1);SESSIONS['nutri_'+NU_DATE]=day;nuPersist();nuRender();}
+function nuEditQ(i){
+  var day=nuDay(NU_DATE),it=day.items[i];if(!it)return;
+  var v=prompt('Nouvelle quantité ('+(it.u==='portion'?'nombre de portions':'g')+') :',it.q);
+  if(v==null)return;v=parseFloat(String(v).replace(',','.'));
+  if(!(v>0))return;it.q=v;SESSIONS['nutri_'+NU_DATE]=day;nuPersist();nuRender();
+}
+function nuSetTrain(b){var day=nuDay(NU_DATE);day.train=!!b;SESSIONS['nutri_'+NU_DATE]=day;nuPersist();nuRender();}
+function nuSup(i){var g=nuGoals(),n=g.sup[i];if(!n)return;var day=nuDay(NU_DATE);day.sup[n]=!day.sup[n];SESSIONS['nutri_'+NU_DATE]=day;nuPersist();nuRender();}
+function nuShift(n){NU_DATE=nuAddDays(NU_DATE,n);nuRender();}
+function nuSaveGoals(){
+  var g=function(id){return parseFloat(document.getElementById(id).value)||0;};
+  var sup=(document.getElementById('nuGsup').value||'').split(',').map(function(x){return x.trim();}).filter(function(x){return x;}).slice(0,8);
+  var o={rest:{kcal:g('nuGkr'),p:g('nuGp'),l:g('nuGl')},train:{kcal:g('nuGkt'),p:g('nuGp'),l:g('nuGl')},sup:sup};
+  if(!o.rest.kcal||!o.train.kcal||!o.rest.p||!o.rest.l){toast('Objectifs incomplets');return;}
+  SESSIONS['nutri_goals']=o;nuPersist();nuRender();toast('Objectifs enregistrés');
+}
+function nuBar(label,val,goal,unit,col){
+  var pct=goal>0?Math.min(100,val/goal*100):0,over=val>goal*1.05&&goal>0,left=goal-val;
+  return'<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--txt2)">'+label+'</span><span><b style="color:#fff">'+nuR(val)+'</b> / '+nuR(goal)+' '+unit+' · <span style="color:'+(over?'#ff6b6b':'var(--txt2)')+'">'+(left>=0?'reste '+nuR(left):'+'+nuR(-left))+'</span></span></div><div style="background:var(--bg2);border-radius:4px;height:7px;margin-top:3px"><div style="background:'+(over?'#ff6b6b':col)+';height:7px;border-radius:4px;width:'+pct.toFixed(0)+'%"></div></div></div>';
+}
+
+// ---------- Bilan semaine + conseils ----------
+function nuMean(a){return a.length?a.reduce(function(s,x){return s+x;},0)/a.length:null;}
+function nuBilan(){
+  var today=localDateStr(new Date()),rows=[],i;
+  for(i=6;i>=0;i--){var ds=nuAddDays(today,-i),d=nuDay(ds),has=(d.items||[]).length>0,t=nuDayTot(d),g=nuTarget(d);rows.push({ds:ds,has:has,t:t,g:g});}
+  var logged=rows.filter(function(r){return r.has&&r.ds!==today;});
+  var h='<table class="dt" style="width:100%"><thead><tr><th>Jour</th><th>kcal</th><th>Objectif</th><th>Prot.</th></tr></thead><tbody>'+rows.map(function(r){return'<tr><td>'+fd(r.ds)+'</td><td>'+(r.has?nuR(r.t.k):'-')+'</td><td>'+r.g.kcal+'</td><td>'+(r.has?nuR(r.t.p)+' g':'-')+'</td></tr>';}).join('')+'</tbody></table>';
+  var D=srt().filter(function(e){return e.p;}),d1=nuAddDays(today,-7),d2=nuAddDays(today,-14);
+  var last=D.filter(function(e){return e.date>d1&&e.date<=today;}),prev=D.filter(function(e){return e.date>d2&&e.date<=d1;});
+  var mL=nuMean(last.map(function(e){return e.p;})),mP=nuMean(prev.map(function(e){return e.p;}));
+  var adv=[];
+  if(mL!=null&&mP!=null){
+    var delta=mL-mP;
+    adv.push('Poids moyen : <b>'+mL.toFixed(2)+' kg</b> cette semaine contre '+mP.toFixed(2)+' la semaine précédente ('+(delta>0?'+':'')+delta.toFixed(2)+' kg).');
+    var fL=nuMean(last.filter(function(e){return e.g;}).map(function(e){return e.p*e.g/100;})),fP=nuMean(prev.filter(function(e){return e.g;}).map(function(e){return e.p*e.g/100;}));
+    if(fL!=null&&fP!=null){var df=fL-fP;adv.push('Masse grasse estimée : '+(df>0?'+':'')+df.toFixed(1)+' kg. '+(df<-0.1&&delta>-0.2?'Le poids bouge peu mais la graisse baisse : c\'est de la recomposition, ça compte comme du progrès (la balance à impédance reste approximative).':'La balance à impédance est approximative, regarde surtout la tendance sur 3 à 4 semaines.'));}
+    var avgK=nuMean(logged.map(function(r){return r.t.k;}));
+    if(logged.length>=4&&avgK!=null){
+      adv.push('Calories saisies : <b>'+nuR(avgK)+' kcal/jour</b> en moyenne sur '+logged.length+' jours complets (aujourd\'hui exclu). Dépense réelle estimée : environ <b>'+nuR(avgK-delta*1100)+' kcal/jour</b> (indicatif, plus fiable après 2 à 3 semaines de saisies complètes).');
+    }else{adv.push('Note au moins 4 jours complets dans la semaine pour que je puisse estimer ta dépense réelle.');}
+    if(delta>-0.2)adv.push('<b>Perte lente.</b> Vérifie d\'abord que tout est noté (huile, sauces, boissons, grignotages, week-end). Si les saisies sont complètes, baisse de 150 à 200 kcal, surtout sur les glucides.');
+    else if(delta>=-0.9)adv.push('<b>Bon rythme</b> (0,2 à 0,9 kg par semaine) : ne change rien.');
+    else adv.push('<b>Perte rapide.</b> Au-delà de 1 kg par semaine, remonte de 150 à 200 kcal pour protéger le muscle.');
+  }else adv.push('Il faut des pesées sur 2 semaines pour comparer. Continue à te peser.');
+  var gs=nuGoals().sup;if(gs.length){var sl=gs.map(function(n){var c=0;rows.forEach(function(r){if(nuDay(r.ds).sup[n])c++;});return nuEsc(n)+' '+c+'/7';});adv.push('Compléments cochés sur 7 jours : '+sl.join(' · ')+'.');}
+  var avgP=nuMean(logged.map(function(r){return r.t.p;})),gP=nuMean(logged.map(function(r){return r.g.p;}));
+  if(avgP!=null&&gP!=null&&avgP<0.9*gP)adv.push('<b>Protéines : '+nuR(avgP)+' g en moyenne pour un objectif de '+nuR(gP)+' g.</b> C\'est la priorité n°1 pour garder le muscle.');
+  return h+'<div style="margin-top:10px;font-size:13px;line-height:1.5">'+adv.map(function(a){return'<div style="margin-bottom:6px">'+a+'</div>';}).join('')+'</div>';
+}
+
+// ---------- Idees de repas avec Claude (sans serveur) ----------
+function nuPrompt(){
+  var day=nuDay(NU_DATE),tg=nuTarget(day),t=nuDayTot(day),l=lat();
+  var fr=(document.getElementById('nuFr').value||'').trim();
+  var nb=parseInt(document.getElementById('nuNb').value)||3;
+  var rem={k:Math.max(0,tg.kcal-t.k),p:Math.max(0,tg.p-t.p),g:Math.max(0,tg.g-t.g),l:Math.max(0,tg.l-t.l)};
+  var txt='J\'ai 45 ans, je mesure 1m83 et je suis en perte de poids'+(l&&l.p?' (dernier poids : '+l.p+' kg)':'')+', avec du CrossFit et de la musculation, et je veux préserver mon muscle.\n'+
+   'Objectif du jour : '+tg.kcal+' kcal, '+tg.p+' g de protéines, '+tg.g+' g de glucides, '+tg.l+' g de lipides.\n'+
+   'Il me reste aujourd\'hui : '+nuR(rem.k)+' kcal, '+nuR(rem.p)+' g de protéines, '+nuR(rem.g)+' g de glucides, '+nuR(rem.l)+' g de lipides.\n'+
+   (fr?'Ce que j\'ai à la maison : '+fr+'.\n':'')+
+   'Propose-moi '+nb+' recettes simples (30 minutes maximum, ingrédients courants en France) qui rentrent dans ce qu\'il me reste, avec beaucoup de protéines.\n'+
+   'Réponds UNIQUEMENT avec un tableau JSON, sans aucun texte autour, au format : [{"nom":"...","cal":650,"p":45,"g":55,"l":20,"cat":"TLJ","ingredients":"150g de poulet · 80g de riz · ...","etapes":"..."}]. cal, p, g, l sont les valeurs pour UNE portion (kcal, g, g, g).';
+  return txt;
+}
+function nuCopyPrompt(){
+  var txt=nuPrompt(),box=document.getElementById('nuPromptBox');
+  box.style.display='block';box.value=txt;
+  var ok=function(){toast('Demande copiée : colle-la dans Claude');};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(ok,function(){box.select();toast('Copie manuelle : le texte est sélectionné');});}
+  else{box.select();try{document.execCommand('copy');ok();}catch(e){toast('Copie manuelle : le texte est sélectionné');}}
+}
+function nuImport(){
+  var raw=(document.getElementById('nuImp').value||''),m=raw.match(/\[[\s\S]*\]/);
+  if(!m){toast('Je ne trouve pas de liste JSON dans ce texte');return;}
+  var arr;try{arr=JSON.parse(m[0]);}catch(e){toast('JSON invalide : redemande à Claude « uniquement le JSON »');return;}
+  var n=0;
+  (Array.isArray(arr)?arr:[]).forEach(function(r){
+    if(!r||!r.nom||!(+r.cal>0))return;
+    if(RECIPES.some(function(x){return x.nom===r.nom;}))return;
+    var ing=String(r.ingredients||'')+(r.etapes?' || '+String(r.etapes):'');
+    RECIPES.push({nom:String(r.nom),cal:Math.round(+r.cal),p:Math.round(+r.p||0),g:Math.round(+r.g||0),l:Math.round(+r.l||0),cat:r.cat||'TLJ',fav:false,custom:true,ingredients:ing});
+    n++;
+  });
+  if(!n){toast('Aucune recette valide importée');return;}
+  saveFB();document.getElementById('nuImp').value='';toast(n+' recette(s) ajoutée(s) dans Recettes');
+  var s=document.getElementById('nuS');if(s&&s.value)nuSearch();
+}
+
+// ---------- Rendu ----------
+function nuBuild(){
+  var c=document.getElementById('aliSuivi');if(!c)return;
+  c.innerHTML=
+  '<div class="card">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px"><button class="bs" onclick="nuShift(-1)">&#8592;</button><div id="nuDateLbl" style="font-size:15px;font-weight:700;color:#fff;text-align:center"></div><button class="bs" onclick="nuShift(1)">&#8594;</button></div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:12px"><button class="fbtn" id="nuTr0" onclick="nuSetTrain(false)" style="flex:1">Pas de séance</button><button class="fbtn" id="nuTr1" onclick="nuSetTrain(true)" style="flex:1">Séance prévue</button></div><div style="font-size:11px;color:var(--txt2);margin:-6px 0 10px">Lundi, mercredi et vendredi sont pré-cochés en séance. Un clic pour changer.</div>'+
+    '<div id="nuBars"></div><div id="nuSup" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>'+
+    '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:var(--txt2)">Modifier mes objectifs</summary><div class="fg" style="margin-top:8px"><div><label>Kcal jour normal</label><input type="number" id="nuGkr" inputmode="numeric"></div><div><label>Kcal jour sport</label><input type="number" id="nuGkt" inputmode="numeric"></div><div><label>Protéines (g)</label><input type="number" id="nuGp" inputmode="numeric"></div><div><label>Lipides (g)</label><input type="number" id="nuGl" inputmode="numeric"></div><div style="grid-column:1/-1"><label>Compléments à cocher (séparés par une virgule)</label><input type="text" id="nuGsup"></div></div><div style="font-size:11px;color:var(--txt2);margin-bottom:8px">Les glucides se calculent automatiquement avec le reste des calories.</div><button class="bs" onclick="nuSaveGoals()">Enregistrer les objectifs</button></details>'+
+  '</div>'+
+  '<div class="card"><div class="ct"><div class="ctd" style="background:var(--acc)"></div>Ajouter ce que j\'ai mangé</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:6px"><input type="text" id="nuTxt" placeholder="Dicte ou tape : j\'ai mangé 250 g de thon, pour 100 g : 116 kcal, 26 de protéines, 0 de glucides, 1 de lipides" style="'+NU_IN+'"></div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:10px"><button class="bs" id="nuMicB" onclick="nuMic()">🎤 Dicter</button><button class="bs" onclick="nuAnalyse()">Analyser la phrase</button></div>'+
+    '<div class="fg"><div style="grid-column:1/-1"><label>Aliment</label><input type="text" id="nuN" oninput="nuPreview()"></div><div><label>Quantité mangée (g)</label><input type="number" id="nuQ" inputmode="decimal" oninput="nuPreview()"></div><div><label>Valeurs pour (g)</label><input type="number" id="nuBase" value="100" inputmode="decimal" oninput="nuPreview()"></div><div><label>Kcal</label><input type="number" id="nuK" inputmode="decimal" oninput="nuPreview()"></div><div><label>Protéines (g)</label><input type="number" id="nuP" inputmode="decimal" oninput="nuPreview()"></div><div><label>Glucides (g)</label><input type="number" id="nuG" inputmode="decimal" oninput="nuPreview()"></div><div><label>Lipides (g)</label><input type="number" id="nuL" inputmode="decimal" oninput="nuPreview()"></div></div>'+
+    '<div id="nuPrev" style="font-size:13px;margin-bottom:10px;color:var(--txt2)"></div>'+
+    '<button class="bp" onclick="nuAdd()">Ajouter au journal</button>'+
+    '<div class="sec-title">Mes aliments et recettes</div><input type="text" id="nuS" placeholder="Rechercher dans mes aliments et mes recettes..." oninput="nuSearch()" style="'+NU_IN+';margin-bottom:6px"><div id="nuSug"></div>'+
+    '<div class="sec-title">Produit du commerce (Open Food Facts)</div><div style="display:flex;gap:6px;margin-bottom:6px"><input type="text" id="nuOffQ" placeholder="Ex : thon naturel, skyr nature..." style="'+NU_IN+'"><button class="bs" onclick="nuOffSearch()">Chercher</button></div><div id="nuOffRes"></div>'+
+  '</div>'+
+  '<div class="card"><div class="ct"><div class="ctd" style="background:var(--ora)"></div>Journal du jour</div><div id="nuJournal"></div></div>'+
+  '<div class="card"><div class="ct"><div class="ctd" style="background:var(--acc2)"></div>Bilan des 7 derniers jours</div><div id="nuBilan"></div></div>'+
+  '<div class="card"><div class="ct"><div class="ctd" style="background:#a78bfa"></div>Idées de repas avec Claude</div>'+
+    '<div style="font-size:12px;color:var(--txt2);margin-bottom:8px">Écris ce que tu as, copie la demande, colle-la dans Claude, puis colle sa réponse ici pour créer les recettes.</div>'+
+    '<div class="fg"><div style="grid-column:1/-1"><label>Ce qu\'il reste dans le frigo (optionnel)</label><input type="text" id="nuFr" placeholder="Ex : 2 blancs de poulet, des courgettes, du riz"></div><div><label>Nombre de recettes</label><input type="number" id="nuNb" value="3" inputmode="numeric"></div></div>'+
+    '<button class="bs" onclick="nuCopyPrompt()">1. Copier la demande</button><textarea id="nuPromptBox" readonly style="display:none;'+NU_IN+';height:110px;margin-top:8px"></textarea>'+
+    '<div style="margin-top:10px"><textarea id="nuImp" placeholder="2. Colle ici la réponse de Claude (le tableau JSON)" style="'+NU_IN+';height:80px"></textarea></div><button class="bs" style="margin-top:6px" onclick="nuImport()">3. Importer dans mes recettes</button>'+
+  '</div>';
+  NU_BUILT=true;
+}
+function nuRender(){
+  if(!NU_BUILT)nuBuild();
+  if(!NU_BUILT)return;
+  var day=nuDay(NU_DATE),tg=nuTarget(day),t=nuDayTot(day),today=localDateStr(new Date());
+  var days=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'],d=new Date(NU_DATE+'T12:00:00');
+  document.getElementById('nuDateLbl').textContent=(NU_DATE===today?'Aujourd\'hui · ':'')+days[d.getDay()]+' '+fd(NU_DATE);
+  var on=function(id,v){var e=document.getElementById(id);if(e){e.classList.toggle('on',v);}};
+  on('nuTr0',!day.train);on('nuTr1',!!day.train);
+  document.getElementById('nuBars').innerHTML=nuBar('Calories',t.k,tg.kcal,'kcal','#ffd166')+nuBar('Protéines',t.p,tg.p,'g','#4a9eff')+nuBar('Glucides',t.g,tg.g,'g','#00e5a0')+nuBar('Lipides',t.l,tg.l,'g','#ff9f43');
+  var g=nuGoals(),set=function(id,v){var e=document.getElementById(id);if(e&&document.activeElement!==e)e.value=v;};
+  set('nuGsup',g.sup.join(', '));set('nuGkr',g.rest.kcal);set('nuGkt',g.train.kcal);set('nuGp',g.rest.p);set('nuGl',g.rest.l);
+  var supEl=document.getElementById('nuSup');if(supEl)supEl.innerHTML=g.sup.map(function(n,i){var on=!!day.sup[n];return'<button class="fbtn'+(on?' on':'')+'" onclick="nuSup('+i+')">'+(on?'✓ ':'')+nuEsc(n)+'</button>';}).join('');
+  var items=day.items||[];
+  document.getElementById('nuJournal').innerHTML=items.length?items.map(function(it,i){var x=nuItemTot(it);return'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)"><div style="flex:1"><div style="font-size:14px;color:#fff">'+nuEsc(it.n)+' <span style="color:var(--txt2);font-size:12px">'+(it.u==='portion'?(it.q===1?'1 portion':it.q+' portions'):it.q+' g')+'</span></div><div style="font-size:12px;color:var(--txt2)">'+nuR(x.k)+' kcal · P '+nuR(x.p)+' · G '+nuR(x.g)+' · L '+nuR(x.l)+'</div></div><button onclick="nuEditQ('+i+')" title="Modifier la quantité" style="border:none;background:none;cursor:pointer;color:#4a9eff;font-size:15px">✎</button><button onclick="nuDel('+i+')" title="Supprimer" style="border:none;background:none;cursor:pointer;color:#ff6b6b;font-size:15px">✕</button></div>';}).join(''):'<div style="font-size:13px;color:var(--txt2)">Rien de noté pour ce jour.</div>';
+  document.getElementById('nuBilan').innerHTML=nuBilan();
+}
+function rSuivi(){if(!NU_DATE)NU_DATE=localDateStr(new Date());nuRender();nuPreview();}
+
+
+// ===================== CAP 3 JUILLET 2027 (5 paliers) =====================
+var CAP5=[{w:99.99,g:27,lg:'27'},{w:95,g:25,lg:'25'},{w:89,g:22,lg:'22'},{w:86,g:19.9,lg:'< 20'},{w:82,g:15,lg:'15'},{w:79,g:12,lg:'12'}];
+var CAP_STAR={0:1,2:2,5:3};
+function capStars(){var n=[0,2,5].filter(capReached).length;return'<span style="color:var(--acc4)">'+'★'.repeat(n)+'</span><span style="color:#3a4060">'+'☆'.repeat(3-n)+'</span>';}
+function capStarRow(i,done){return CAP_STAR[i]?'<span style="color:'+(done?'var(--acc4)':'#3a4060')+'">'+(done?'★':'☆')+'</span>':'';}
+function capFmt(x){return String(x).replace('.',',');}
+function capReached(i){var v=SESSIONS['cap_p'+(i+1)];return typeof v==='string'&&v!=='off';}
+function capClamp(x){return Math.min(1,Math.max(0,x));}
+function capState(mP,mG){
+  // auto-coche : les deux criteres (poids ET graisse) doivent etre atteints
+  var changed=false;
+  CAP5.forEach(function(c,i){
+    var k='cap_p'+(i+1);
+    if(SESSIONS[k]===undefined&&mP!=null&&mG!=null&&mP<=c.w&&mG<=c.g){SESSIONS[k]=localDateStr(new Date());changed=true;}
+  });
+  if(changed)saveFB();
+  var cur=-1;
+  for(var i=0;i<CAP5.length;i++){if(!capReached(i)){cur=i;break;}}
+  if(cur<0)return{cur:-1,pct:100,wp:100,gp:100};
+  var sw=cur===0?SW:CAP5[cur-1].w,sg=cur===0?SG0:CAP5[cur-1].g,t=CAP5[cur];
+  var wp=mP!=null?capClamp((sw-mP)/(sw-t.w)):0;
+  var gp=mG!=null?capClamp((sg-mG)/(sg-t.g)):0;
+  return{cur:cur,pct:Math.round((wp+gp)/2*100),wp:Math.round(wp*100),gp:Math.round(gp*100)};
+}
+function capBar(label,v,col){return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);margin-top:7px"><span>'+label+'</span><span>'+v+' %</span></div><div style="background:var(--bg1);border-radius:4px;height:6px;margin-top:4px"><div style="background:'+col+';height:6px;border-radius:4px;width:'+v+'%"></div></div>';}
+function capCard(mP,mG){
+  var s=capState(mP,mG),sub,big,bars='';
+  if(s.cur<0){sub='<span style="color:var(--acc)">✓ Les 6 paliers sont atteints</span>';big='✨';}
+  else{
+    sub=(s.cur>0?'<span style="color:var(--acc);font-weight:700">✓ Palier '+s.cur+'</span> · ':'')+'Palier '+(s.cur+1)+' sur 6';
+    big=s.pct+'%';
+    bars=capBar('Poids',s.wp,'#4a9eff')+capBar('Graisse',s.gp,'var(--ora)');
+  }
+  var rows=CAP5.map(function(c,i){
+    var done=capReached(i),cur=i===s.cur;
+    var col=done?'var(--acc)':cur?'var(--acc4)':'var(--txt2)';
+    return'<tr onclick="event.stopPropagation();capRow('+i+')" style="color:'+col+';'+(cur?'font-weight:700;':'')+'cursor:pointer"><td style="padding:5px 4px;border-bottom:1px solid var(--brd)">'+(done?'✓ ':'')+(i+1)+'</td><td style="padding:5px 4px;border-bottom:1px solid var(--brd)">'+capFmt(c.w)+' kg</td><td style="padding:5px 4px;border-bottom:1px solid var(--brd)">'+c.lg+' %</td><td style="padding:5px 4px;border-bottom:1px solid var(--brd)">'+(cur?'en cours ':'')+capStarRow(i,done)+'</td></tr>';
+  }).join('');
+  return'<div class="obj-card" id="capCard" onclick="capToggle()" style="cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center"><div class="obj-title">🏔️ Mon Cap</div><div style="font-size:17px;letter-spacing:2px">'+capStars()+'</div></div><div class="obj-sub" style="margin-bottom:2px">'+sub+'</div>'+(s.cur<0?'<div class="obj-pct" style="color:var(--acc)">'+big+'</div>':'<div class="obj-pct" style="color:var(--acc4);font-size:28px">'+big+'</div>')+bars+'<div id="capList" style="display:none;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">'+rows+'</table><div style="font-size:10px;color:var(--txt2);margin-top:6px">Toucher une ligne cochée pour la décocher.</div></div></div>';
+}
+function capToggle(){var l=document.getElementById('capList');if(l)l.style.display=l.style.display==='none'?'block':'none';}
+function capRow(i){
+  var k='cap_p'+(i+1);
+  if(capReached(i)){if(!confirm('Décocher le palier '+(i+1)+' ?'))return;SESSIONS[k]='off';}
+  else if(SESSIONS[k]==='off'){SESSIONS[k]=localDateStr(new Date());}
+  else return;
+  saveFB();rDB();
+  var l=document.getElementById('capList');if(l)l.style.display='block';
+}
+
+// ===================== ONGLET STRATEGIE =====================
+function stLine(a,b){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--brd);font-size:14px"><span>'+a+'</span><span style="color:var(--txt2)">'+b+'</span></div>';}
+function stAdv(t){return'<div style="background:var(--bg2);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:13px">💡 '+t+'</div>';}
+function stCard(title,dot,inner){return'<div class="card"><div class="ct" style="margin-bottom:6px"><div class="ctd" style="background:'+dot+'"></div>'+title+'</div>'+inner+'</div>';}
+function stTrend(d,thr,goodNeg){
+  if(d==null)return'<span style="color:var(--txt2)">--</span>';
+  if(Math.abs(d)<=thr)return'<span style="color:var(--txt2)">stable</span>';
+  var good=goodNeg?d<0:d>0;
+  return'<span style="color:'+(good?'var(--acc)':'var(--ora)')+'">'+(d<0?'en baisse':'en hausse')+'</span>';
+}
+function rStrat(){
+  var c=document.getElementById('st');if(!c)return;
+  var today=localDateStr(new Date()),days=[],i;
+  for(i=0;i<7;i++)days.push(nuAddDays(today,-i));
+  var tw=getWkEntries(0),pw=getWkEntries(-1);
+  var mP=avg(tw.map(function(e){return e.p;})),pP=avg(pw.map(function(e){return e.p;}));
+  var mG=avg(tw.filter(function(e){return e.g!=null;}).map(function(e){return e.g;})),pG=avg(pw.filter(function(e){return e.g!=null;}).map(function(e){return e.g;}));
+  var dP=mP!=null&&pP!=null?mP-pP:null,dG=mG!=null&&pG!=null?mG-pG:null;
+  var cs=capState(mP,mG);
+  var capTxt=(cs.cur<0?'<span style="color:var(--acc)">6 paliers atteints</span>':'<span style="color:var(--acc4)">'+cs.pct+' %</span>')+' '+capStars();
+  var h=stCard('Cette semaine','var(--acc)',stLine('⚖️ Poids',stTrend(dP,0.2,true))+stLine('🔥 Graisse',stTrend(dG,0.2,true))+stLine('🏔️ Cap',capTxt));
+  // alimentation
+  var logged=days.filter(function(d){return nuDay(d).items.length>0;}),nj=logged.length;
+  var avgP=nuMean(logged.map(function(d){return nuDayTot(nuDay(d)).p;})),gP=nuMean(logged.map(function(d){return nuTarget(nuDay(d)).p;}));
+  var advA;
+  if(nj<5)advA='Note tes repas chaque jour, même à peu près : c\'est la base pour comprendre pourquoi la balance bouge peu.';
+  else if(avgP!=null&&gP!=null&&avgP<0.9*gP)advA='Il manque des protéines : ajoute une source à chaque repas (whey, skyr, thon, œufs, poulet).';
+  else advA='Pense à noter l\'huile, les sauces et les boissons : c\'est souvent là que se cachent les calories.';
+  h+=stCard('Alimentation','var(--ora)',stLine('Journal rempli',nj+(nj>1?' jours':' jour')+' sur 7')+stLine('Protéines (moyenne)',avgP!=null?nuR(avgP)+' g sur '+nuR(gP)+' g':'--')+stAdv(advA));
+  // sport
+  var chk=function(d){return SESSIONS['daycheck_'+d]||{};};
+  var ns=days.filter(function(d){return chk(d).sport;}).length;
+  var advS=ns<3?'Vise tes 3 séances de la semaine : lundi, mercredi, vendredi.':'Séances tenues. Une marche de 30 minutes le mardi ou le jeudi matin peut venir en plus.';
+  h+=stCard('Sport','#4a9eff',stLine('Séances (« Sport fait » coché)',ns+' sur 3')+stAdv(advS));
+  // habitudes
+  var sup=nuGoals().sup,supCnt=sup.map(function(n){return{n:n,c:days.filter(function(d){return nuDay(d).sup[n];}).length};});
+  var nsl=days.filter(function(d){return chk(d).sommeil;}).length;
+  var low=supCnt.slice().sort(function(a,b){return a.c-b.c;})[0];
+  var advH;
+  if(low&&low.c<5)advH='Associe « '+nuEsc(low.n)+' » à un geste fixe de la journée (le café du matin par exemple), séance ou pas.';
+  else if(nsl<5)advH='Soigne le sommeil : c\'est pendant la nuit que le corps récupère.';
+  else advH='Bonnes habitudes cette semaine, continue.';
+  h+=stCard('Habitudes','var(--acc2)',supCnt.map(function(s){return stLine(nuEsc(s.n),s.c+' sur 7');}).join('')+stLine('Sommeil (« Bon sommeil » coché)',nsl+' sur 7')+stAdv(advH));
+  // prochain pas
+  var step;
+  if(nj<7)step='Remplir le journal 7 jours sur 7 cette semaine.';
+  else if(avgP!=null&&gP!=null&&avgP<0.9*gP)step='Atteindre tes protéines chaque jour.';
+  else if(low&&low.c<7)step='Ne pas oublier « '+nuEsc(low.n)+' » cette semaine.';
+  else if(ns<3)step='Faire tes 3 séances.';
+  else step='Garder ce rythme.';
+  h+='<div class="card"><div class="ct" style="margin-bottom:6px"><div class="ctd" style="background:var(--acc4)"></div>Mon prochain petit pas</div><div style="font-size:15px">'+step+'</div></div>';
+  c.innerHTML=h;
+}
+
+</script>
 <script>
 const firebaseConfig={apiKey:"AIzaSyD7Vds4Ax_TdewFE5aomxzVtf4asPE8uuY",authDomain:"challenge2026-cyril.firebaseapp.com",projectId:"challenge2026-cyril",storageBucket:"challenge2026-cyril.firebasestorage.app",messagingSenderId:"129785067440",appId:"1:129785067440:web:400a6c2ff2d05e615f4875"};
 firebase.initializeApp(firebaseConfig);
@@ -907,7 +1281,7 @@ function nf(v,u){return v!=null?v.toFixed(1)+(u||''):'-';}
 function getWkEntries(off){const today=new Date(),dow=today.getDay(),mon=new Date(today);mon.setDate(today.getDate()-(dow===0?6:dow-1)+off*7);mon.setHours(0,0,0,0);const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);return srt().filter(e=>{const d=new Date(e.date);return d>=mon&&d<=sun;});}
 function getWkKey(off){const today=new Date(),dow=today.getDay(),mon=new Date(today);mon.setDate(today.getDate()-(dow===0?6:dow-1)+off*7);mon.setHours(0,0,0,0);return mon.toISOString().split('T')[0];}
 
-function sT(id,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));el.classList.add('on');document.getElementById(id).classList.add('on');if(id==='db')rDB();if(id==='gr')rGR();if(id==='sa')rSa();if(id==='sp')rSp();if(id==='ali'){menuWOff=0;document.getElementById('aliMenu').style.display='block';document.getElementById('aliRec').style.display='none';document.getElementById('aliCo').style.display='none';rMn();rRec();rCourses();}if(id==='rec')rRec();if(id==='co')rCourses();}
+function sT(id,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));el.classList.add('on');document.getElementById(id).classList.add('on');if(id==='db')rDB();if(id==='gr')rGR();if(id==='sa')rSa();if(id==='sp')rSp();if(id==='ali'){menuWOff=0;document.getElementById('aliMenu').style.display='block';document.getElementById('aliRec').style.display='none';document.getElementById('aliCo').style.display='none';rMn();rRec();rCourses();setAliTab('suivi',document.querySelector('#ali>.filter-row .fbtn'));}if(id==='rec')rRec();if(id==='co')rCourses();if(id==='st')rStrat();}
 
 // DASHBOARD
 function mc2(label,val,unit,row1,row2){
@@ -1013,7 +1387,7 @@ function rDB(){
     html+='</div>';
     return html;
   }())+
-    '<div class="obj-card"><div class="obj-title">⚡ Score Forme</div><div class="obj-sub">Poids · Graisse · Muscles</div><div class="obj-pct" style="color:'+pcol(sc)+'">'+sc+'%</div><div style="display:flex;gap:3px;height:7px;border-radius:4px;overflow:hidden;margin-bottom:5px"><div style="width:'+pPct*0.3+'%;background:#4a9eff"></div><div style="width:'+gPct*0.4+'%;background:var(--ora)"></div><div style="width:'+mPct*0.3+'%;background:var(--acc)"></div></div><div class="obj-stats"><span style="color:#4a9eff">P '+pPct.toFixed(0)+'%</span><span style="color:var(--ora)">G '+gPct.toFixed(0)+'%</span><span style="color:var(--acc)">M '+mPct.toFixed(0)+'%</span></div></div>';
+    '<div class="obj-card"><div class="obj-title">⚡ Score Forme</div><div class="obj-sub">Poids · Graisse · Muscles</div><div class="obj-pct" style="color:'+pcol(sc)+'">'+sc+'%</div><div style="display:flex;gap:3px;height:7px;border-radius:4px;overflow:hidden;margin-bottom:5px"><div style="width:'+pPct*0.3+'%;background:#4a9eff"></div><div style="width:'+gPct*0.4+'%;background:var(--ora)"></div><div style="width:'+mPct*0.3+'%;background:var(--acc)"></div></div><div class="obj-stats"><span style="color:#4a9eff">P '+pPct.toFixed(0)+'%</span><span style="color:var(--ora)">G '+gPct.toFixed(0)+'%</span><span style="color:var(--acc)">M '+mPct.toFixed(0)+'%</span></div></div>'+(typeof capCard==='function'?capCard(mP,mG):'');
   dk('dbW');
   const s7=srt().slice(-8);
   if(document.getElementById('legDB'))document.getElementById('legDB').innerHTML='<span class="li"><span class="lsq" style="background:#4a9eff"></span>Poids reel</span><span class="li"><span class="ldsh" style="border-color:#00e5a0"></span>Objectif</span>';
@@ -2170,12 +2544,14 @@ function setFlt(days){fltDays=days;['7','30','90','365','0'].forEach(d=>document
 function setAliTab(tab,el){
   document.querySelectorAll('#ali>.filter-row .fbtn').forEach(b=>b.classList.remove('on'));
   if(el)el.classList.add('on');
+  document.getElementById('aliSuivi').style.display=tab==='suivi'?'block':'none';
   document.getElementById('aliMenu').style.display=tab==='menu'?'block':'none';
   document.getElementById('aliRec').style.display=tab==='rec'?'block':'none';
   document.getElementById('aliCo').style.display=tab==='co'?'block':'none';
   if(tab==='rec')rRec();
   if(tab==='co')rCourses();
   if(tab==='menu')rMn();
+  if(tab==='suivi')rSuivi();
 }
 
 
