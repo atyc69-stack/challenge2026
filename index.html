@@ -878,6 +878,25 @@ function stTrend(d,thr,goodNeg){
   var good=goodNeg?d<0:d>0;
   return'<span style="color:'+(good?'var(--acc)':'var(--ora)')+'">'+(d<0?'en baisse':'en hausse')+'</span>';
 }
+function stWeek(){var d=new Date(),dow=d.getDay(),mon=new Date(d);mon.setDate(d.getDate()-(dow===0?6:dow-1));var out=[],i;for(i=0;i<7;i++){var x=new Date(mon);x.setDate(mon.getDate()+i);out.push(localDateStr(x));}return out;}
+function stStrip(key,wk){
+  var today=localDateStr(new Date()),L='LMMJVSD';
+  var h='<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 2px"><span style="font-size:13px;color:var(--txt2)">Touche un jour pour le cocher</span><div style="display:flex;gap:6px">';
+  wk.forEach(function(d,i){
+    var on=!!(SESSIONS['daycheck_'+d]||{})[key],fut=d>today,isT=d===today;
+    h+='<div style="width:30px;text-align:center;'+(fut?'opacity:.35':'')+'"><div style="font-size:11px;color:'+(isT?'var(--acc)':'var(--txt2)')+';'+(isT?'font-weight:700':'')+'">'+L[i]+'</div><div '+(fut?'':'onclick="stToggle(\''+key+'\',\''+d+'\')" ')+'style="width:26px;height:26px;border-radius:50%;margin:2px auto 0;border:1.5px solid '+(on?'var(--acc)':'var(--brd)')+';background:'+(on?'var(--acc)':'transparent')+';'+(fut?'':'cursor:pointer')+'"></div></div>';
+  });
+  return h+'</div></div>';
+}
+function stToggle(key,ds){var dc=SESSIONS['daycheck_'+ds]||(SESSIONS['daycheck_'+ds]={});dc[key]=!dc[key];saveFB();rStrat();}
+function sfDone(ds){return !!(SESSIONS['daycheck_'+ds]||{}).sport;}
+function sfStyle(done){return'margin-left:auto;font-size:12px;font-weight:700;border-radius:14px;padding:4px 12px;cursor:pointer;font-family:inherit;'+(done?'background:rgba(0,229,160,.15);border:1px solid rgba(0,229,160,.5);color:var(--acc)':'background:transparent;border:1px solid var(--brd);color:var(--txt2)');}
+function sfLabel(done){return done?'✓ Séance faite':'○ Séance faite';}
+function toggleSeanceFaite(ds,btn){
+  var dc=SESSIONS['daycheck_'+ds]||(SESSIONS['daycheck_'+ds]={});dc.sport=!dc.sport;
+  if(btn){btn.setAttribute('style',sfStyle(dc.sport));btn.textContent=sfLabel(dc.sport);}
+  saveFB();
+}
 function rStrat(){
   var c=document.getElementById('st');if(!c)return;
   var today=localDateStr(new Date()),days=[],i;
@@ -899,18 +918,19 @@ function rStrat(){
   h+=stCard('Alimentation','var(--ora)',stLine('Journal rempli',nj+(nj>1?' jours':' jour')+' sur 7')+stLine('Protéines (moyenne)',avgP!=null?nuR(avgP)+' g sur '+nuR(gP)+' g':'--')+stAdv(advA));
   // sport
   var chk=function(d){return SESSIONS['daycheck_'+d]||{};};
-  var ns=days.filter(function(d){return chk(d).sport;}).length;
+  var wk=stWeek();
+  var ns=wk.filter(function(d){return chk(d).sport;}).length;
   var advS=ns<3?'Vise tes 3 séances de la semaine : lundi, mercredi, vendredi.':'Séances tenues. Une marche de 30 minutes le mardi ou le jeudi matin peut venir en plus.';
-  h+=stCard('Sport','#4a9eff',stLine('Séances (« Sport fait » coché)',ns+' sur 3')+stAdv(advS));
+  h+=stCard('Sport','#4a9eff',stLine('Séances cette semaine',ns+' sur 3')+stStrip('sport',wk)+stAdv(advS));
   // habitudes
   var sup=nuGoals().sup,supCnt=sup.map(function(n){return{n:n,c:days.filter(function(d){return nuDay(d).sup[n];}).length};});
-  var nsl=days.filter(function(d){return chk(d).sommeil;}).length;
+  var nsl=wk.filter(function(d){return chk(d).sommeil;}).length;
   var low=supCnt.slice().sort(function(a,b){return a.c-b.c;})[0];
   var advH;
   if(low&&low.c<5)advH='Associe « '+nuEsc(low.n)+' » à un geste fixe de la journée (le café du matin par exemple), séance ou pas.';
   else if(nsl<5)advH='Soigne le sommeil : c\'est pendant la nuit que le corps récupère.';
   else advH='Bonnes habitudes cette semaine, continue.';
-  h+=stCard('Habitudes','var(--acc2)',supCnt.map(function(s){return stLine(nuEsc(s.n),s.c+' sur 7');}).join('')+stLine('Sommeil (« Bon sommeil » coché)',nsl+' sur 7')+stAdv(advH));
+  h+=stCard('Habitudes','var(--acc2)',supCnt.map(function(s){return stLine(nuEsc(s.n),s.c+' sur 7');}).join('')+stLine('Sommeil cette semaine',nsl+' sur 7')+stStrip('sommeil',wk)+stAdv(advH));
   // prochain pas
   var step;
   if(nj<7)step='Remplir le journal 7 jours sur 7 cette semaine.';
@@ -2077,13 +2097,14 @@ function setRessenti(dk2,ei,r){
   if(!SESSIONS[sk])SESSIONS[sk]={exs:{}};
   if(!SESSIONS[sk].exs[ei])SESSIONS[sk].exs[ei]={series:{},charge:0,ressenti:null};
   SESSIONS[sk].exs[ei].ressenti=r;
-  // Button ID uses se.key without c_ prefix and without date
-  var btnKey=dk2.replace(/^c_/,'').split('_').slice(0,-3).join('_');
-  if(!document.getElementById('r_'+btnKey+'_'+ei+'_easy'))btnKey=dk2.replace(/^c_/,'').replace(/_2026.*/,'');
-  ['easy','ok','hard'].forEach(function(v){
-    var b=document.getElementById('r_'+btnKey+'_'+ei+'_'+v);
-    if(b)b.className='r-btn'+(r===v?' sel-'+v:'');
+  // allume le bon bouton (recherche par donnees, pas par identifiant)
+  document.querySelectorAll('.r-btn').forEach(function(b){
+    if(b.dataset.k===dk2&&b.dataset.i===String(ei))b.className='r-btn'+(b.dataset.r===r?' sel-'+r:'');
   });
+  // un ressenti choisi veut dire que la seance est faite : coche automatique du jour
+  var dm=sk.match(/\d{4}-\d{2}-\d{2}/),dd=dm?dm[0]:localDateStr(new Date());
+  var dc=SESSIONS['daycheck_'+dd]||(SESSIONS['daycheck_'+dd]={});
+  if(!dc.sport){dc.sport=true;document.querySelectorAll('.fait-btn[data-ds="'+dd+'"]').forEach(function(x){x.setAttribute('style',sfStyle(true));x.textContent=sfLabel(true);});}
   saveFB();
 }
 function toggleSpDay(id){const b=document.getElementById("body_"+id),c=document.getElementById("chev_"+id);if(!b)return;const o=b.style.display==="none";b.style.display=o?"block":"none";if(c)c.innerHTML=o?"&#9660;":"&#9654;";}
@@ -2275,7 +2296,7 @@ function rSp(){
         '</div>';
       }).join('');
 
-      const rHtml=['easy','ok','hard'].map(v=>'<button class="r-btn'+(curEx.ressenti===v?' sel-'+v:'')+'" id="r_'+se.key+'_'+i+'_'+v+'" onclick="setRessenti(\''+curSk+'\','+i+',\''+v+'\')">'+(v==='easy'?'Facile':v==='ok'?'OK':'Difficile')+'</button>').join('');
+      const rHtml=['easy','ok','hard'].map(v=>'<button class="r-btn'+(curEx.ressenti===v?' sel-'+v:'')+'" id="r_'+se.key+'_'+i+'_'+v+'" data-k="'+curSk+'" data-i="'+i+'" data-r="'+v+'" onclick="setRessenti(\''+curSk+'\','+i+',\''+v+'\')">'+(v==='easy'?'Facile':v==='ok'?'OK':'Difficile')+'</button>').join('');
       const restTxt=ex.rest>0?ex.rest+'s':'';
       return buildExCard(se, ex, i, curEx, coachHtml, seriesHtml, sugCharge, rHtml, restTxt, coach, ds, isFut);
     }).join('');
@@ -2293,6 +2314,7 @@ function rSp(){
           )+
           (isT?'<span style="font-size:11px;color:var(--acc);font-weight:700">AUJOURD&#39;HUI</span>':'')+
         '</div>'+
+        '<button class="fait-btn" data-ds="'+ds+'" onclick="toggleSeanceFaite(\''+ds+'\',this)" style="'+sfStyle(sfDone(ds))+'">'+sfLabel(sfDone(ds))+'</button>'+
         '<span id="chev_'+spId+'" style="color:var(--txt2)">'+(isT?'&#9660;':'&#9654;')+'</span>'+
       '</div>'+
       '<div id="body_'+spId+'" style="display:'+(isT?'block':'none')+'">'+
