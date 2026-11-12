@@ -270,7 +270,7 @@ body,input,button,select,textarea{font-family:'Barlow Condensed',sans-serif;font
     <div class="ct"><div class="ctd" style="background:#ffd166"></div>Volume — Biceps / Cuisse</div>
     <div class="leg" id="lgMesures2"></div>
     <div style="position:relative;height:220px"><canvas id="gMesures2"></canvas></div>
-  </div>
+  </div>  <div class="card" id="projCard"></div>
 </div>
 
 <!-- SAISIE -->
@@ -946,6 +946,85 @@ function rStrat(){
   else step='Garder ce rythme.';
   h+='<div class="card"><div class="ct" style="margin-bottom:6px"><div class="ctd" style="background:var(--acc4)"></div>Mon prochain petit pas</div><div style="font-size:15px">'+step+'</div></div>';
   c.innerHTML=h;
+}
+
+</script>
+<script>
+/* Projection du poids (onglet Graphiques) */
+function prWeeks(){
+  var today=localDateStr(new Date()),map={};
+  srt().forEach(function(e){
+    if(e.date>today||!e.p)return;
+    var dd=new Date(e.date),dow=dd.getDay(),mon=new Date(dd);
+    mon.setDate(dd.getDate()-(dow===0?6:dow-1));
+    var k=localDateStr(mon);
+    (map[k]=map[k]||[]).push(e);
+  });
+  var t0=new Date(S0+'T12:00:00').getTime(),out=[];
+  Object.keys(map).sort().forEach(function(k){
+    var a=map[k],ps=a.map(function(e){return e.p;}),gs=a.filter(function(e){return e.g!=null&&!isNaN(e.g);}).map(function(e){return e.g;});
+    var xs=a.map(function(e){return (new Date(e.date+'T12:00:00').getTime()-t0)/604800000;});
+    var mp=ps.reduce(function(s,v){return s+v;},0)/ps.length;
+    var mg=gs.length?gs.reduce(function(s,v){return s+v;},0)/gs.length:null;
+    out.push({x:xs.reduce(function(s,v){return s+v;},0)/xs.length,w:mp,fm:mg!=null?mp*mg/100:null});
+  });
+  return out;
+}
+function prSlope(xs,ys){
+  var n=xs.length;if(n<3)return null;
+  var mx=xs.reduce(function(s,v){return s+v;},0)/n,my=ys.reduce(function(s,v){return s+v;},0)/n,num=0,den=0;
+  for(var i=0;i<n;i++){num+=(xs[i]-mx)*(ys[i]-my);den+=(xs[i]-mx)*(xs[i]-mx);}
+  return den>0?num/den:null;
+}
+function prFmt(v){return (Math.round(v*10)/10).toFixed(1).replace('.',',');}
+function rProj(){
+  var el=document.getElementById('projCard');if(!el)return;
+  var pts=prWeeks(),ct='<div class="ct"><div class="ctd" style="background:#ffd166"></div>Où j\'en serai si je continue comme ça</div>';
+  if(pts.length<3){el.innerHTML=ct+'<div style="font-size:13px;color:var(--txt2)">Il faut au moins 3 semaines de pesées pour projeter une tendance.</div>';return;}
+  var sw=prSlope(pts.map(function(p){return p.x;}),pts.map(function(p){return p.w;}));
+  var fp=pts.filter(function(p){return p.fm!=null;});
+  var sf=prSlope(fp.map(function(p){return p.x;}),fp.map(function(p){return p.fm;}));
+  var last=pts[pts.length-1],lx=last.x,lw=last.w;
+  var t0=new Date(S0+'T12:00:00').getTime(),now=new Date();
+  var wkOf=function(d){return (d.getTime()-t0)/604800000;};
+  var d6=new Date(now);d6.setMonth(d6.getMonth()+6);
+  var d12=new Date(now);d12.setFullYear(d12.getFullYear()+1);
+  var dEnd=new Date(now.getFullYear()+(now.getMonth()===11&&now.getDate()>31?1:0),11,31,12,0,0);
+  var marks=[];
+  if(dEnd>now&&wkOf(dEnd)-lx>0.5)marks.push({w:wkOf(dEnd),l:'31/12'});
+  marks.push({w:wkOf(d6),l:'dans 6 mois'});marks.push({w:wkOf(d12),l:'dans 1 an'});
+  var lines=[];
+  if(sw!=null&&sw<0)lines.push({s:sw,c:'#ffd166',dy:-7,nm:'Tendance de mon poids'});
+  if(sf!=null&&sf<0)lines.push({s:sf,c:'#00e5a0',dy:14,nm:'Si toute la graisse se voit'});
+  var note='';
+  if(!lines.length){el.innerHTML=ct+'<div style="font-size:13px;color:var(--txt2)">Pas encore de tendance à la baisse sur tes moyennes de semaine : la projection apparaîtra dès qu\'elle sera visible.</div>';return;}
+  if(lines.length<2)note=' Une des deux lignes n\'apparaît pas : sa tendance n\'est pas encore à la baisse.';
+  var W=marks[marks.length-1].w+1.5;
+  var vals=[];pts.forEach(function(p){vals.push(p.w);});
+  lines.forEach(function(L){marks.forEach(function(m){vals.push(lw+L.s*(m.w-lx));});});
+  var ymax=Math.ceil(Math.max.apply(null,vals)+0.5),ymin=Math.floor(Math.min.apply(null,vals)-1);
+  var X=function(w){return 34+w/W*(350-34);},Y=function(v){return 20+(ymax-v)/(ymax-ymin)*190;};
+  var s='<svg viewBox="0 0 360 240" width="100%" role="img" aria-label="Projection du poids à 6 mois et 1 an">';
+  CAP5.forEach(function(c){if(c.w>ymin&&c.w<ymax){var y=Y(c.w);s+='<line x1="34" y1="'+y.toFixed(1)+'" x2="350" y2="'+y.toFixed(1)+'" stroke="#2a2f45" stroke-dasharray="2 4"/><text x="31" y="'+(y+3).toFixed(1)+'" font-size="9" fill="#5f6480" text-anchor="end">'+String(c.w).replace('.',',')+'</text>';}});
+  marks.forEach(function(m,i){s+='<line x1="'+X(m.w).toFixed(1)+'" y1="20" x2="'+X(m.w).toFixed(1)+'" y2="210" stroke="#2a2f45"/><text x="'+X(m.w).toFixed(1)+'" y="224" font-size="10" fill="#8b90a8" text-anchor="'+(i===marks.length-1?'end':'middle')+'">'+m.l+'</text>';});
+  s+='<text x="'+X(0).toFixed(1)+'" y="224" font-size="10" fill="#8b90a8">départ</text>';
+  s+='<polyline points="'+pts.map(function(p){return X(p.x).toFixed(1)+','+Y(p.w).toFixed(1);}).join(' ')+'" fill="none" stroke="#4a9eff" stroke-width="2.2"/>';
+  pts.forEach(function(p){s+='<circle cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.w).toFixed(1)+'" r="3" fill="#4a9eff"/>';});
+  lines.forEach(function(L){
+    var e=marks[marks.length-1];
+    s+='<line x1="'+X(lx).toFixed(1)+'" y1="'+Y(lw).toFixed(1)+'" x2="'+X(e.w).toFixed(1)+'" y2="'+Y(lw+L.s*(e.w-lx)).toFixed(1)+'" stroke="'+L.c+'" stroke-width="2" stroke-dasharray="6 4"/>';
+    marks.forEach(function(m){var v=lw+L.s*(m.w-lx);s+='<circle cx="'+X(m.w).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="3.5" fill="'+L.c+'"/><text x="'+(X(m.w)-5).toFixed(1)+'" y="'+(Y(v)+L.dy).toFixed(1)+'" font-size="10" fill="'+L.c+'" text-anchor="end" font-weight="700">'+prFmt(v)+'</text>';});
+  });
+  s+='</svg>';
+  var lg='<div class="leg"><span class="li"><span class="lsq" style="background:#4a9eff"></span>Mes moyennes de semaine</span>';
+  lines.forEach(function(L){lg+='<span class="li"><span class="ldsh" style="border-color:'+L.c+'"></span>'+(L.c==='#ffd166'?'Tendance de mon poids':'Si toute la perte de graisse se voit sur la balance')+'</span>';});
+  lg+='</div>';
+  var tb='<table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:8px"><tr><th style="text-align:left;font-size:11px;text-transform:uppercase;color:var(--txt2);padding:6px 4px;border-bottom:1px solid var(--brd)"></th>';
+  marks.forEach(function(m){tb+='<th style="text-align:right;font-size:11px;text-transform:uppercase;color:var(--txt2);padding:6px 4px;border-bottom:1px solid var(--brd)">'+(m.l==='31/12'?'31/12':m.l.replace('dans ',''))+'</th>';});
+  tb+='</tr>';
+  lines.forEach(function(L){tb+='<tr><td style="color:'+L.c+';padding:7px 4px;border-bottom:1px solid var(--brd)">'+(L.c==='#ffd166'?'Tendance de mon poids':'Si toute la graisse se voit')+'</td>';marks.forEach(function(m){tb+='<td style="text-align:right;font-weight:700;padding:7px 4px;border-bottom:1px solid var(--brd)">'+prFmt(lw+L.s*(m.w-lx))+'</td>';});tb+='</tr>';});
+  tb+='</table>';
+  el.innerHTML=ct+s+lg+tb+'<div style="font-size:12px;color:var(--txt2);margin-top:8px">Moyennes de semaine, calculées depuis le départ et remises à jour à chaque pesée. Balance à ±1 kg, rythme qui ralentit en général : la partie lointaine est un ordre de grandeur.'+note+'</div>';
 }
 
 </script>
@@ -1762,6 +1841,7 @@ function weeklyAvgMulti(data, fields){
 }
 
 function rGR(){
+  try{rProj();}catch(e){console.error(e);}
   const s=srt();
   ['g1','g2','g3','g5','gRando'].forEach(id=>dk(id));
   // G1 - Poids vs objectif
