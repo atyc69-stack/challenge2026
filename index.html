@@ -179,7 +179,7 @@ body,input,button,select,textarea{font-family:'Barlow Condensed',sans-serif;font
 <div class="hdr">
   <div>
     <div class="ht">Challenge — Cyril</div>
-    <div class="hs" id="ageStr">45 ans · 1m83 · Depart 02/10/2026</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><span class="ev" style="background:rgba(255,209,102,.15);color:#ffd166;border:1px solid rgba(255,209,102,.3)">✨ Sommet Interieur</span></div>
+    <div class="hs" id="ageStr">45 ans · 1m83 · Départ 01/10/2026</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"><span class="ev" style="background:rgba(255,209,102,.15);color:#ffd166;border:1px solid rgba(255,209,102,.3)">✨ Sommet Interieur</span></div>
   </div>
   <div>
     <div id="dStr" style="font-size:12px;color:var(--txt2);margin-bottom:4px;text-align:right"></div>
@@ -257,7 +257,7 @@ body,input,button,select,textarea{font-family:'Barlow Condensed',sans-serif;font
   
   
   
-  <div class="card"><div class="ct"><div class="ctd" style="background:var(--acc2)"></div>Masse maigre</div><div class="leg" id="lg5"></div><div style="position:relative;height:200px"><canvas id="g5"></canvas></div></div>
+  <div class="card"><div class="ct"><div class="ctd" style="background:var(--acc2)"></div><span title="Masse maigre : tout ce qui n'est pas de la graisse (muscles, os, organes, eau). Calcul : poids × (1 − % de graisse)." style="cursor:help">Masse maigre</span> <span title="Masse maigre : tout ce qui n'est pas de la graisse (muscles, os, organes, eau). Calcul : poids × (1 − % de graisse)." onclick="toast('Masse maigre = poids moins la graisse (muscles, os, organes, eau).')" style="cursor:help;font-size:12px;color:var(--txt2);margin-left:4px">ⓘ</span></div><div class="leg" id="lg5"></div><div style="position:relative;height:200px"><canvas id="g5"></canvas></div></div>
   <div class="card"><div class="ct"><div class="ctd" style="background:var(--ora)"></div>% Graisse par zone</div><div class="leg" id="lg6"></div><div style="position:relative;height:200px"><canvas id="g6"></canvas></div></div>
   <div class="card"><div class="ct"><div class="ctd" style="background:var(--acc)"></div>Muscles par zone (kg)</div><div class="leg" id="lg7"></div><div style="position:relative;height:200px"><canvas id="g7"></canvas></div></div>
 
@@ -1700,9 +1700,9 @@ const firebaseConfig={apiKey:"AIzaSyD7Vds4Ax_TdewFE5aomxzVtf4asPE8uuY",authDomai
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore(),DOC=db.collection('challenge').doc('cyril');
 
-const S0='2026-10-02',SW=105.1,SG0=30.1,SE0=49.8,SM0=69.8,SPORT_START='2026-10-02';
+const S0='2026-10-01',SW=105.1,SG0=30.1,SE0=49.8,SM0=69.7,SPORT_START='2026-10-01';
 const TGT1=99.99,TGT2=89.99; // cibles étape 1 (< 100 kg) et étape 2 (< 90 kg)
-const BASE0={p:105.1,g:30.1,e:49.8,m:69.8,gBD:24.5,gBG:23.2,gTR:30.9,gJD:30.1,gJG:27.9,mBD:4.3,mBG:4.2,mTR:38.4,mJD:11.5,mJG:11.4};
+const BASE0={p:105.1,g:30.1,e:49.8,m:69.7,gBD:25.4,gBG:23.3,gTR:31.6,gJD:31.3,gJG:27.7,mBD:4.2,mBG:4.5,mTR:38.0,mJD:11.4,mJG:11.7};
 const T1={d:'2026-07-03',w:88},T2={d:'2026-08-22',w:86};
 const RAXES=['Poids inverse','Masse Musc.','% Eau','Energie','% Graisse inv.','Masse Maigre'];
 var RCMB=[78,68,78,82,73,80],RCMR=[85,75,82,88,82,87],RCAT=[92,88,85,92,90,93];
@@ -1966,7 +1966,7 @@ SESSIONS=d.sessions||{};MENU_DATA=d.menus||{};COURSES_CHECKED=d.checked||{};
     // Apply blacklist - remove non-custom deleted recipes only
     if(DELETED_RECIPES.length){
       RECIPES=RECIPES.filter(function(r){return r.custom||!DELETED_RECIPES.includes(r.nom);});
-    }COURSES_LIST=d.courses||[];COACH_RECO=d.coach||{};RANDO_DONE=d.rando||{};INIT_DATA.forEach(function(init){var e=DATA.find(function(x){return x.date===init.date;});if(e){['gBD','gBG','gTR','gJD','gJG','mBD','mBG','mTR','mJD','mJG'].forEach(function(f){if(e[f]==null&&init[f]!=null)e[f]=init[f];});}});}else{DATA=INIT_DATA.map(e=>({...e}));await saveFB();}setSS('ok');}catch(e){setSS('err');const l=localStorage.getItem('c2026_bk');if(l){const d=JSON.parse(l);DATA=d.data||[];
+    }COURSES_LIST=d.courses||[];COACH_RECO=d.coach||{};RANDO_DONE=d.rando||{};INIT_DATA.forEach(function(init){var e=DATA.find(function(x){return x.date===init.date;});if(e){['gBD','gBG','gTR','gJD','gJG','mBD','mBG','mTR','mJD','mJG'].forEach(function(f){if(e[f]==null&&init[f]!=null)e[f]=init[f];});}});ensureBaseline();}else{DATA=INIT_DATA.map(e=>({...e}));await saveFB();}setSS('ok');}catch(e){setSS('err');const l=localStorage.getItem('c2026_bk');if(l){const d=JSON.parse(l);DATA=d.data||[];
 SESSIONS=d.sessions||{};MENU_DATA=d.menus||{};COURSES_CHECKED=d.checked||{};
     STOCK_ITEMS=d.stock||{};
     COURSES_DATA=d.courses_data||[];
@@ -1982,8 +1982,11 @@ SESSIONS=d.sessions||{};MENU_DATA=d.menus||{};COURSES_CHECKED=d.checked||{};
     if(DELETED_RECIPES.length){
       RECIPES=RECIPES.filter(function(r){return r.custom||!DELETED_RECIPES.includes(r.nom);});
     }COURSES_LIST=d.courses||[];COACH_RECO=d.coach||{};RANDO_DONE=d.rando||{};INIT_DATA.forEach(function(init){var e=DATA.find(function(x){return x.date===init.date;});if(e){['gBD','gBG','gTR','gJD','gJG','mBD','mBG','mTR','mJD','mJG'].forEach(function(f){if(e[f]==null&&init[f]!=null)e[f]=init[f];});}});await applyNewStart(d);}else DATA=INIT_DATA.map(e=>({...e}));}}
-// NOUVEAU DEPART 02/10/2026 : l'historique avant S0 est archive dans Firestore puis retire de l'app
+// NOUVEAU DEPART 01/10/2026 : l'historique avant S0 est archive dans Firestore puis retire de l'app
 function ensureBaseline(){
+  // migration : l'ancien départ était daté 2026-10-02 (anciennes valeurs). On retire ces valeurs de départ, on garde le reste.
+  var old=DATA.find(function(e){return e.date==='2026-10-02'&&e.p===105.1&&e.g===30.1&&e.e===49.8&&(e.m===69.8||e.m===69.7)&&(e.gBD==null||e.gBD===24.5);});
+  if(old){Object.keys(BASE0).forEach(function(k){delete old[k];});if(Object.keys(old).filter(function(k){return k!=='date'&&k!=='n'&&old[k]!=null&&old[k]!=='';}).length===0)DATA.splice(DATA.indexOf(old),1);}
   var b=DATA.find(function(e){return e.date===S0;});
   if(b){Object.assign(b,BASE0);}else{DATA.unshift(Object.assign({date:S0},BASE0));}
 }
@@ -2005,7 +2008,7 @@ async function applyNewStart(d){
       DATA=DATA.filter(function(e){return !(e.date&&e.date<S0);});
       oldKeys.forEach(function(k){delete SESSIONS[k];});
       await saveFB();
-      toast('Nouveau départ 02/10/2026 appliqué');
+      toast('Nouveau départ 01/10/2026 appliqué');
     }
   }catch(err){
     console.error('applyNewStart:',err);
@@ -2473,6 +2476,9 @@ function getChargesForExercise(seanceKey,exSearch){
 function mkLineChart(canvasId,data,color,label){dk(canvasId);if(!data.length){document.getElementById(canvasId).style.display='none';return;}document.getElementById(canvasId).style.display='';CH[canvasId]=new Chart(document.getElementById(canvasId),{type:'line',data:{labels:data.map(d=>d.date),datasets:[{label,data:data.map(d=>d.val),borderColor:color,backgroundColor:'rgba(74,158,255,0.1)',tension:0.3,pointRadius:5,pointBackgroundColor:color,borderWidth:2.5,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{...GS.x,ticks:{...GS.x.ticks,maxRotation:45,autoSkip:true}},y:{...GS.y,min:0,title:{display:true,text:'kg',color:'#8b90a8',font:{family:'Barlow Condensed',size:12}}}}}});}
 
 
+function wkMon(ds){var d=new Date(ds+'T12:00:00'),dow=d.getDay();d.setDate(d.getDate()-(dow===0?6:dow-1));return localDateStr(d);}
+function wkLbl(w){var n=Math.round((new Date(w+'T12:00:00')-new Date('2026-09-28T12:00:00'))/604800000)+1;var d=w<S0?S0:w;return 'S'+n+' '+d.slice(8,10)+'/'+d.slice(5,7);}
+function wkStart(wks,arr,v){if(wks.length&&wks[0]===wkMon(S0)&&arr.length&&v!=null)arr[0]=v;return arr;}
 function weeklyAvg(data, field){
   var wkMap={};
   data.forEach(function(e){
@@ -2485,8 +2491,8 @@ function weeklyAvg(data, field){
   });
   var wks=Object.keys(wkMap).sort();
   return {
-    labels:wks.map(function(w){var n=Math.round((new Date(w)-new Date('2026-04-06'))/(7*24*3600*1000))+1;return 'S'+n+' '+w.slice(8,10)+'/'+w.slice(5,7);}),
-    data:wks.map(function(w){var a=wkMap[w];return Math.round(a.reduce(function(s,v){return s+v;},0)/a.length*10)/10;})
+    labels:wks.map(wkLbl),
+    data:wkStart(wks,wks.map(function(w){var a=wkMap[w];return Math.round(a.reduce(function(s,v){return s+v;},0)/a.length*10)/10;}),BASE0[field])
   };
 }
 function weeklyAvgMulti(data, fields){
@@ -2501,9 +2507,9 @@ function weeklyAvgMulti(data, fields){
     fields.forEach(function(f){if(e[f]!=null){if(!wkMap[wk][f])wkMap[wk][f]=[];wkMap[wk][f].push(e[f]);}});
   });
   var wks=Object.keys(wkMap).sort();
-  var labels=wks.map(function(w){var n=Math.round((new Date(w)-new Date('2026-04-06'))/(7*24*3600*1000))+1;return 'S'+n+' '+w.slice(8,10)+'/'+w.slice(5,7);});
+  var labels=wks.map(wkLbl);
   var result={labels:labels};
-  fields.forEach(function(f){result[f]=wks.map(function(w){var a=wkMap[w][f]||[];return a.length?Math.round(a.reduce(function(s,v){return s+v;},0)/a.length*10)/10:null;});});
+  fields.forEach(function(f){result[f]=wkStart(wks,wks.map(function(w){var a=wkMap[w][f]||[];return a.length?Math.round(a.reduce(function(s,v){return s+v;},0)/a.length*10)/10:null;}),BASE0[f]);});
   return result;
 }
 
@@ -2525,13 +2531,14 @@ function rGR(){
     if(!weekMap[wk])weekMap[wk]={sum:0,count:0,obj:objW(wk)};
     if(e.p){weekMap[wk].sum+=e.p;weekMap[wk].count++;}
   });
-  Object.keys(weekMap).sort().forEach(function(wk){
+  var _g1k=Object.keys(weekMap).sort();
+  _g1k.forEach(function(wk){
     var w=weekMap[wk];
-    var wkNum=Math.round((new Date(wk)-new Date('2026-04-06'))/(7*24*3600*1000))+1;
-    L.push('S'+wkNum+' '+wk.slice(8,10)+'/'+wk.slice(5,7));
+    L.push(wkLbl(wk));
     R.push(w.count>0?Math.round(w.sum/w.count*10)/10:null);
     O.push(w.obj);
   });
+  wkStart(_g1k,R,BASE0.p);
   document.getElementById('lg1').innerHTML='<span class="li"><span class="lsq" style="background:#4a9eff"></span>Poids reel</span><span class="li"><span class="ldsh" style="border-color:#00e5a0"></span>Objectif</span>';
   CH['g1']=new Chart(document.getElementById('g1'),{type:'line',data:{labels:L,datasets:[
     {label:'Poids',data:R,borderColor:'#4a9eff',backgroundColor:'rgba(74,158,255,0.07)',tension:0.35,pointRadius:4,pointBackgroundColor:'#4a9eff',spanGaps:true,borderWidth:2,fill:true},
@@ -2551,8 +2558,9 @@ function rGR(){
   var wkDatesG=Object.keys(wkMapG).sort();
   var avg=function(arr){return arr.length?Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length*10)/10:null;};
   var sf={dates:wkDatesG,g:wkDatesG.map(function(w){return avg(wkMapG[w].g);}),m:wkDatesG.map(function(w){return avg(wkMapG[w].m);}),eau:wkDatesG.map(function(w){return avg(wkMapG[w].eau)||null;})};
+  wkStart(wkDatesG,sf.g,BASE0.g);wkStart(wkDatesG,sf.m,BASE0.m);wkStart(wkDatesG,sf.eau,BASE0.e);
   document.getElementById('lg2').innerHTML='<span class="li"><span class="lsq" style="background:#ff9f43"></span>Graisse %</span><span class="li"><span class="lsq" style="background:#4a9eff"></span>Eau %</span>';
-  CH['g2']=new Chart(document.getElementById('g2'),{type:'line',data:{labels:sf.dates.map(function(w){var wn=Math.round((new Date(w)-new Date('2026-04-06'))/(7*24*3600*1000))+1;return 'S'+wn+' '+w.slice(8,10)+'/'+w.slice(5,7);}),datasets:[
+  CH['g2']=new Chart(document.getElementById('g2'),{type:'line',data:{labels:sf.dates.map(wkLbl),datasets:[
     {label:'Graisse',data:sf.g,borderColor:'#ff9f43',backgroundColor:'rgba(255,159,67,0.08)',tension:0.3,pointRadius:5,pointBackgroundColor:'#ff9f43',borderWidth:2,fill:true,yAxisID:'yL'},
     {label:'Eau',data:sf.eau,borderColor:'#4a9eff',backgroundColor:'rgba(74,158,255,0.06)',tension:0.3,pointRadius:5,pointBackgroundColor:'#4a9eff',borderWidth:2,fill:false,yAxisID:'yL',spanGaps:true}
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
@@ -2627,7 +2635,8 @@ function rGR(){
   var wkDatesG5=Object.keys(wkMapG5).sort();
   var avgG5mm=wkDatesG5.map(function(w){var a=wkMapG5[w].mm;return a.length?Math.round(a.reduce(function(s,v){return s+v;},0)/a.length*10)/10:null;});
   var avgG5m=wkDatesG5.map(function(w){var a=wkMapG5[w].m;return a.length?Math.round(a.reduce(function(s,v){return s+v;},0)/a.length*10)/10:null;});
-  var labelsG5=wkDatesG5.map(function(w){var n=Math.round((new Date(w)-new Date('2026-03-30'))/(7*24*3600*1000))+1;return 'S'+n+' '+w.slice(8,10)+'/'+w.slice(5,7);});
+  var labelsG5=wkDatesG5.map(wkLbl);
+  wkStart(wkDatesG5,avgG5mm,Math.round(BASE0.p*(1-BASE0.g/100)*10)/10);wkStart(wkDatesG5,avgG5m,BASE0.m);
   document.getElementById('lg5').innerHTML='<span class="li"><span class="lsq" style="background:#6c63ff"></span>Masse maigre kg</span><span class="li"><span class="lsq" style="background:#00e5a0"></span>Muscles kg</span>';
   dk('g5');
   if(labelsG5.length&&document.getElementById('g5')){
@@ -3576,7 +3585,7 @@ async function init(){
   document.getElementById('iD').value=localDateStr(new Date());
   // Age dynamique
   const bday=new Date(1981,2,4);const now=new Date();let age=now.getFullYear()-bday.getFullYear();if(now<new Date(now.getFullYear(),bday.getMonth(),bday.getDate()))age--;
-  document.getElementById('ageStr').textContent=age+' ans · 1m83 · Depart 02/10/2026';
+  document.getElementById('ageStr').textContent=age+' ans · 1m83 · Départ 01/10/2026';
   // Load Firebase
   await loadFB();
   document.getElementById('loadingOverlay').classList.add('hidden');
@@ -4085,7 +4094,7 @@ function saveRandoInfo(){
 }
 
 // ============================================================
-var MESURES_INIT={'2026-10-02':{gBD:24.5,gBG:23.2,gTR:30.9,gJD:30.1,gJG:27.9,mBD:4.3,mBG:4.2,mTR:38.4,mJD:11.5,mJG:11.4,poitrine:111.5,taille:110.5,hanche:111.5,bicepsD:38,bicepsG:38,cuisseD:66,cuisseG:65,molletD:41,molletG:40}};
+var MESURES_INIT={'2026-10-01':{gBD:24.5,gBG:23.2,gTR:30.9,gJD:30.1,gJG:27.9,mBD:4.3,mBG:4.2,mTR:38.4,mJD:11.5,mJG:11.4,poitrine:111.5,taille:110.5,hanche:111.5,bicepsD:38,bicepsG:38,cuisseD:66,cuisseG:65,molletD:41,molletG:40}};
 var _mesuresFlt='taille';
 
 function getMesures(){
@@ -4178,7 +4187,7 @@ function renderMesuresGraph(){
 }
 
 // MESURES CM
-var MESURES_INIT={'2026-10-02':{gBD:24.5,gBG:23.2,gTR:30.9,gJD:30.1,gJG:27.9,mBD:4.3,mBG:4.2,mTR:38.4,mJD:11.5,mJG:11.4,poitrine:111.5,taille:110.5,hanche:111.5,bicepsD:38,bicepsG:38,cuisseD:66,cuisseG:65,molletD:41,molletG:40}};
+var MESURES_INIT={'2026-10-01':{gBD:24.5,gBG:23.2,gTR:30.9,gJD:30.1,gJG:27.9,mBD:4.3,mBG:4.2,mTR:38.4,mJD:11.5,mJG:11.4,poitrine:111.5,taille:110.5,hanche:111.5,bicepsD:38,bicepsG:38,cuisseD:66,cuisseG:65,molletD:41,molletG:40}};
 var _mesHistDays=15;
 
 function getMesures(){
